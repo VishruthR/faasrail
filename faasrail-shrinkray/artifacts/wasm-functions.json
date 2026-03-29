@@ -1,0 +1,37 @@
+[
+    {
+        "id": "aes-4ed58c4e08a18a048b11",
+        "image": "bench-aes.wasm",
+        "memory": 192
+    },
+    {
+        "id": "chameleon-e52ff3854d5b6f",
+        "image": "docker.io/ckatsak/snaplace-fbpml-chameleon:0.0.3",
+        "memory": 768
+    },
+    {
+        "id": "disk-rand-0ebf93f8938852",
+        "image": "bench-disk-rand.wasm",
+        "memory": 192
+    },
+    {
+        "id": "disk-seq-0ebf93f8938852c",
+        "image": "bench-disk-seq.wasm",
+        "memory": 192
+    },
+    {
+        "id": "float-c571b37ac335ef8f25",
+        "image": "bench-float.wasm",
+        "memory": 192
+    },
+    {
+        "id": "gzip-ad2ebb2666f4c4877b4",
+        "image": "bench-gzip.wasm",
+        "memory": 192
+    },
+    {
+        "id": "json-60fd8c7b14a741bb5bc",
+        "image": "bench-json.wasm",
+        "memory": 192
+    }
+]

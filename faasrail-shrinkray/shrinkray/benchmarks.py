@@ -78,6 +78,31 @@ FAASCELL_FUNCTIONS = OrderedDict(
             "image": "docker.io/ckatsak/snaplace-fbpml-video_processing:0.0.3",
             "memory_mb": 128,
         },
+        # WASM benchmarks from faasrail-benchmarks
+        "float": {
+            "image": "bench-float.wasm",
+            "memory_mb": 128,
+        },
+        "json": {
+            "image": "bench-json.wasm",
+            "memory_mb": 128,
+        },
+        "aes": {
+            "image": "bench-aes.wasm",
+            "memory_mb": 128,
+        },
+        "gzip": {
+            "image": "bench-gzip.wasm",
+            "memory_mb": 128,
+        },
+        "disk-seq": {
+            "image": "bench-disk-seq.wasm",
+            "memory_mb": 128,
+        },
+        "disk-rand": {
+            "image": "bench-disk-rand.wasm",
+            "memory_mb": 128,
+        },
     }
 )
 
