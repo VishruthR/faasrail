@@ -25,8 +25,8 @@ fn main() {
     getrandom::getrandom(&mut data).expect("getrandom failed");
 
     // Write raw file
-    let raw_path = "/tmp/bench_gzip_raw.bin";
-    let gz_path = "/tmp/bench_gzip_compressed.gz";
+    let raw_path = "./bench_gzip_raw.bin";
+    let gz_path = "./bench_gzip_compressed.gz";
     fs::write(raw_path, &data).expect("failed to write raw file");
 
     let timer = Timer::start();

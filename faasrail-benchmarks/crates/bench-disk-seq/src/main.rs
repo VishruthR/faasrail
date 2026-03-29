@@ -19,7 +19,7 @@ fn main() {
     let file_size = args[2].parse::<usize>().unwrap();
     let total_bytes = file_size * 1024 * 1024;
     let block_size = byte_size;
-    let path = "/tmp/bench_disk_seq.bin";
+    let path = "./bench_disk_seq.bin";
 
     // Generate one block of random data to write repeatedly
     let mut block = vec![0u8; block_size];

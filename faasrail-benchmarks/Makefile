@@ -25,12 +25,12 @@ test-aes: build
 	wasmtime run $(RELEASE_DIR)/bench-aes.wasm 256 10
 
 test-gzip: build
-	wasmtime run --dir=/tmp $(RELEASE_DIR)/bench-gzip.wasm 1
+	wasmtime run --dir=.::. $(RELEASE_DIR)/bench-gzip.wasm 1
 
 test-disk-seq: build
-	wasmtime run --dir=/tmp $(RELEASE_DIR)/bench-disk-seq.wasm 4096 1
+	wasmtime run --dir=.::. $(RELEASE_DIR)/bench-disk-seq.wasm 4096 1
 
 test-disk-rand: build
-	wasmtime run --dir=/tmp $(RELEASE_DIR)/bench-disk-rand.wasm 4096 1
+	wasmtime run --dir=.::. $(RELEASE_DIR)/bench-disk-rand.wasm 4096 1
 
 test-all: test-float test-json test-chameleon test-aes test-gzip test-disk-seq test-disk-rand

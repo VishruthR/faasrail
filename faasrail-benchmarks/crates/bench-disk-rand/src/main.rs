@@ -21,7 +21,7 @@ fn main() {
     let total_bytes = file_size * 1024 * 1024;
     let block_size = byte_size;
     let num_blocks = total_bytes / block_size;
-    let path = "/tmp/bench_disk_rand.bin";
+    let path = "./bench_disk_rand.bin";
 
     let mut rng = rand::thread_rng();
 
