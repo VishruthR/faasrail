@@ -1,17 +1,10 @@
-use bench_common::{read_input, write_output, Timer};
+use bench_common::{write_output, Timer};
 use rand::Rng;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::fs::{self, File};
 use std::hint::black_box;
 use std::io::{Read, Seek, SeekFrom, Write};
-
-#[derive(Deserialize)]
-struct Input {
-    /// File size in MB.
-    file_size: usize,
-    /// Block size for each random read/write in bytes.
-    byte_size: usize,
-}
+use std::env;
 
 #[derive(Serialize)]
 struct Output {
@@ -21,9 +14,12 @@ struct Output {
 }
 
 fn main() {
-    let input: Input = read_input();
-    let total_bytes = input.file_size * 1024 * 1024;
-    let block_size = input.byte_size;
+    let args: Vec<String> = env::args().collect();
+
+    let byte_size = args[1].parse::<usize>().unwrap();
+    let file_size = args[2].parse::<usize>().unwrap();
+    let total_bytes = file_size * 1024 * 1024;
+    let block_size = byte_size;
     let num_blocks = total_bytes / block_size;
     let path = "/tmp/bench_disk_rand.bin";
 

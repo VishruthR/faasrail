@@ -1,11 +1,7 @@
-use bench_common::{read_input, write_output, Timer};
-use serde::{Deserialize, Serialize};
+use bench_common::{write_output, Timer};
+use serde::Serialize;
 use std::hint::black_box;
-
-#[derive(Deserialize)]
-struct Input {
-    n: u64,
-}
+use std::env;
 
 #[derive(Serialize)]
 struct Output {
@@ -23,9 +19,11 @@ fn float_ops(n: u64) -> f64 {
 }
 
 fn main() {
-    let input: Input = read_input();
+    let args: Vec<String> = env::args().collect();
+
+    let n = args[1].parse::<u64>().unwrap();
     let timer = Timer::start();
-    let result = black_box(float_ops(input.n));
+    let result = black_box(float_ops(n));
     let elapsed_ms = timer.elapsed_ms();
     write_output(&Output { result, elapsed_ms });
 }

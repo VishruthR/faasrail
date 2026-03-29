@@ -1,11 +1,7 @@
-use bench_common::{read_input, write_output, Timer};
-use serde::{Deserialize, Serialize};
+use bench_common::{write_output, Timer};
+use serde::Serialize;
 use std::hint::black_box;
-
-#[derive(Deserialize)]
-struct Input {
-    json_string: String,
-}
+use std::env;
 
 #[derive(Serialize)]
 struct Output {
@@ -15,12 +11,14 @@ struct Output {
 }
 
 fn main() {
-    let input: Input = read_input();
+    let args: Vec<String> = env::args().collect();
+
+    let json_string = &args[1];
     let timer = Timer::start();
 
     // Deserialize the JSON string into a generic Value
     let parsed: serde_json::Value =
-        serde_json::from_str(&input.json_string).expect("invalid json_string");
+        serde_json::from_str(&json_string).expect("invalid json_string");
 
     // Re-serialize back to string
     let serialized = serde_json::to_string(&parsed).expect("failed to serialize");

@@ -1,16 +1,11 @@
 use aes::Aes256;
-use bench_common::{read_input, write_output, Timer};
+use bench_common::{write_output, Timer};
 use ctr::cipher::{KeyIvInit, StreamCipher};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::hint::black_box;
+use std::env;
 
 type Aes256Ctr = ctr::Ctr128BE<Aes256>;
-
-#[derive(Deserialize)]
-struct Input {
-    message_length: usize,
-    num_iterations: u32,
-}
 
 #[derive(Serialize)]
 struct Output {
@@ -24,14 +19,17 @@ const KEY: &[u8; 32] = b"This is a key123This is a key123";
 const NONCE: &[u8; 16] = b"This is an IV456";
 
 fn main() {
-    let input: Input = read_input();
+    let args: Vec<String> = env::args().collect();
+
+    let message_length = args[1].parse::<usize>().unwrap();
+    let num_iterations = args[2].parse::<u32>().unwrap();
     let timer = Timer::start();
 
     // Generate random plaintext
-    let mut message = vec![0u8; input.message_length];
+    let mut message = vec![0u8; message_length];
     getrandom::getrandom(&mut message).expect("getrandom failed");
 
-    for _ in 0..input.num_iterations {
+    for _ in 0..num_iterations {
         // Encrypt
         let mut ciphertext = message.clone();
         let mut cipher = Aes256Ctr::new(KEY.into(), NONCE.into());

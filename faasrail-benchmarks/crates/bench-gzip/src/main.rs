@@ -1,16 +1,11 @@
-use bench_common::{read_input, write_output, Timer};
+use bench_common::{write_output, Timer};
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::fs;
 use std::hint::black_box;
 use std::io::Write;
-
-#[derive(Deserialize)]
-struct Input {
-    /// File size in MB.
-    file_size: usize,
-}
+use std::env;
 
 #[derive(Serialize)]
 struct Output {
@@ -20,8 +15,10 @@ struct Output {
 }
 
 fn main() {
-    let input: Input = read_input();
-    let size_bytes = input.file_size * 1024 * 1024;
+    let args: Vec<String> = env::args().collect();
+
+    let file_size = args[1].parse::<usize>().unwrap();
+    let size_bytes = file_size * 1024 * 1024;
 
     // Generate random data
     let mut data = vec![0u8; size_bytes];

@@ -1,12 +1,7 @@
-use bench_common::{read_input, write_output, Timer};
-use serde::{Deserialize, Serialize};
+use bench_common::{write_output, Timer};
+use std::env;
+use serde::Serialize;
 use std::hint::black_box;
-
-#[derive(Deserialize)]
-struct Input {
-    num_of_rows: usize,
-    num_of_cols: usize,
-}
 
 #[derive(Serialize)]
 struct Output {
@@ -36,9 +31,12 @@ fn render_table(rows: usize, cols: usize) -> String {
 }
 
 fn main() {
-    let input: Input = read_input();
+    let args: Vec<String> = env::args().collect();
+    
+    let num_of_cols = args[1].parse::<usize>().unwrap();
+    let num_of_rows = args[2].parse::<usize>().unwrap();
     let timer = Timer::start();
-    let html = render_table(input.num_of_rows, input.num_of_cols);
+    let html = render_table(num_of_rows, num_of_cols);
     let len = black_box(html.len());
     let elapsed_ms = timer.elapsed_ms();
     write_output(&Output { html_length: len, elapsed_ms });
