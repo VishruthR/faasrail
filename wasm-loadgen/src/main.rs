@@ -80,9 +80,13 @@ fn parse_wskprops() -> WskConfig {
         }
     }
 
-    let api_host = api_host.expect("APIHOST not found in ~/.wskprops");
+    let mut api_host = api_host.expect("APIHOST not found in ~/.wskprops");
     let auth = auth.expect("AUTH not found in ~/.wskprops");
     let b64 = base64::engine::general_purpose::STANDARD.encode(&auth);
+
+    if !api_host.starts_with("http://") && !api_host.starts_with("https://") {
+        api_host = format!("https://{api_host}");
+    }
 
     WskConfig {
         api_host: api_host.trim_end_matches('/').to_string(),
