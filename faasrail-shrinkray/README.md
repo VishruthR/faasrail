@@ -18,6 +18,28 @@
 
 ---
 
+## Custom Edit:
+
+Download trace data from: 
+https://github.com/Azure/AzurePublicDataset/blob/master/AzureFunctionsDataset2019.md
+
+```
+wget https://azurepublicdatasettraces.blob.core.windows.net/azurepublicdatasetv2/azurefunctions_dataset2019/azurefunctions-dataset2019.tar.xz
+
+tar -tJf azurefunctions-dataset2019.tar.xz
+
+# only keep function/invocation d01
+mkdir -p azure && mv function_durations_percentiles.anon.d01.csv invocations_per_function_md.anon.d01.csv azure/
+```
+
+
+Run trace script (30 min)
+```
+python3.11 shrinkray/main.py -w artifacts/icy2-20231011-5.10.189__20231014175133.json -o ../inputs/spec-mr_20rps_30min.csv trace --trace-dir artifacts/azure -r 20 -d 30 spec --time-scaling minute_range -f 25
+```
+
+
+
 ## Using the CLI tool
 
 - Generate a specification for a 30 minutes long experiment with a maximum
