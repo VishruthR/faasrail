@@ -1,0 +1,44 @@
+[
+  {
+    "mean": 2728.091899,
+    "stdev": 109.195361,
+    "bench": "float",
+    "payload": "{\"n\": 10000000}"
+  },
+  {
+    "mean": 0.009491,
+    "stdev": 0.00,
+    "bench": "json",
+    "payload": "{\"json_string\": \"{\\\"a\\\":1,\\\"b\\\":[1,2,3]}\"}"
+  },
+  {
+    "mean": 304.614492,
+    "stdev": 66.205307,
+    "bench": "chameleon",
+    "payload": "{\"num_of_cols\": 100, \"num_of_rows\": 10000}"
+  },
+  {
+    "mean": 102.241212,
+    "stdev": 66.748883,
+    "bench": "aes",
+    "payload": "{\"message_length\": 65536, \"num_iterations\": 500}"
+  },
+  {
+    "mean": 60.247827,
+    "stdev": 16.748994,
+    "bench": "gzip",
+    "payload": "{\"file_size\": 1}"
+  },
+  {
+    "mean": 6.778975,
+    "stdev": 3.874202,
+    "bench": "disk-seq",
+    "payload": "{\"byte_size\": 4096, \"file_size\": 1}"
+  },
+  {
+    "mean": 2.929398,
+    "stdev": 2.752802,
+    "bench": "disk-rand",
+    "payload": "{\"byte_size\": 4096, \"file_size\": 1}"
+  }
+]
