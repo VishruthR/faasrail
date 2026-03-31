@@ -314,6 +314,7 @@ async fn main() {
                 let result = client
                     .post(&url)
                     .header("Authorization", &auth)
+                    .timeout(timeout)
                     .json(&inv.payload)
                     .send()
                     .await;
