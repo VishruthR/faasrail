@@ -1,43 +1,43 @@
 [
   {
-    "mean": 2728.091899,
-    "stdev": 109.195361,
+    "mean": 2721.288156,
+    "stdev": 146.658927,
     "bench": "float",
     "payload": "{\"n\": 10000000}"
   },
   {
-    "mean": 0.009491,
-    "stdev": 0.00,
+    "mean": 0.011647,
+    "stdev": 0.003316,
     "bench": "json",
     "payload": "{\"json_string\": \"{\\\"a\\\":1,\\\"b\\\":[1,2,3]}\"}"
   },
   {
-    "mean": 304.614492,
-    "stdev": 66.205307,
+    "mean": 319.042249,
+    "stdev": 134.138090,
     "bench": "chameleon",
     "payload": "{\"num_of_cols\": 100, \"num_of_rows\": 10000}"
   },
   {
-    "mean": 102.241212,
-    "stdev": 66.748883,
+    "mean": 107.161463,
+    "stdev": 79.680740,
     "bench": "aes",
     "payload": "{\"message_length\": 65536, \"num_iterations\": 500}"
   },
   {
-    "mean": 60.247827,
-    "stdev": 16.748994,
+    "mean": 67.003012,
+    "stdev": 34.992896,
     "bench": "gzip",
     "payload": "{\"file_size\": 1}"
   },
   {
-    "mean": 6.778975,
-    "stdev": 3.874202,
+    "mean": 6.647955,
+    "stdev": 6.879127,
     "bench": "disk-seq",
     "payload": "{\"byte_size\": 4096, \"file_size\": 1}"
   },
   {
-    "mean": 2.929398,
-    "stdev": 2.752802,
+    "mean": 5.771919,
+    "stdev": 5.598429,
     "bench": "disk-rand",
     "payload": "{\"byte_size\": 4096, \"file_size\": 1}"
   }
