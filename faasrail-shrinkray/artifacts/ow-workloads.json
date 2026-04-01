@@ -3,7 +3,7 @@
     "mean": 2721.288156,
     "stdev": 146.658927,
     "bench": "float",
-    "payload": "{\"n\": 10000000}"
+    "payload": "{\"n\": 10000}"
   },
   {
     "mean": 0.011647,
@@ -15,13 +15,13 @@
     "mean": 319.042249,
     "stdev": 134.138090,
     "bench": "chameleon",
-    "payload": "{\"num_of_cols\": 100, \"num_of_rows\": 10000}"
+    "payload": "{\"num_of_cols\": 10, \"num_of_rows\": 100}"
   },
   {
     "mean": 107.161463,
     "stdev": 79.680740,
     "bench": "aes",
-    "payload": "{\"message_length\": 65536, \"num_iterations\": 500}"
+    "payload": "{\"message_length\": 256, \"num_iterations\": 10}"
   },
   {
     "mean": 67.003012,
