@@ -1,0 +1,32 @@
+[
+  {
+    "mean": 1.819270,
+    "stdev": 0.043116,
+    "bench": "float",
+    "payload": "{\"n\": 10000}"
+  },
+  {
+    "mean": 0.031774,
+    "stdev": 0.004000,
+    "bench": "json",
+    "payload": "{\"json_string\": \"{\\\"a\\\":1,\\\"b\\\":[1,2,3]}\"}"
+  },
+  {
+    "mean": 8.990811,
+    "stdev": 1.743903,
+    "bench": "chameleon",
+    "payload": "{\"num_of_cols\": 100, \"num_of_rows\": 100}"
+  },
+  {
+    "mean": 1.973882,
+    "stdev": 0.267368,
+    "bench": "disk-seq",
+    "payload": "{\"byte_size\": 4096, \"file_size\": 1}"
+  },
+  {
+    "mean": 1.696857,
+    "stdev": 0.232131,
+    "bench": "disk-rand",
+    "payload": "{\"byte_size\": 4096, \"file_size\": 1}"
+  }
+]

@@ -1,8 +1,8 @@
 extern crate serde_json;
-extern crate getrandom;
+extern crate serde_derive;
 extern crate flate2;
-#[macro_use] extern crate serde_derive;
 
+use serde_derive::{Deserialize, Serialize};
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use serde_json::{Error, Value};
@@ -34,12 +34,19 @@ fn black_box<T>(dummy: T) -> T {
     }
 }
 
+fn fill_bytes(buf: &mut [u8]) {
+    for (i, b) in buf.iter_mut().enumerate() {
+        let i = i as u32;
+        *b = ((i.wrapping_mul(131) ^ 0xA5) % 256) as u8;
+    }
+}
+
 pub fn main(args: Value) -> Result<Value, Error> {
     let input: Input = serde_json::from_value(args)?;
     let size_bytes = input.file_size * 1024 * 1024;
 
     let mut data = vec![0u8; size_bytes];
-    getrandom::getrandom(&mut data).expect("getrandom failed");
+    fill_bytes(&mut data);
 
     let start = std::time::Instant::now();
     let mut encoder = GzEncoder::new(Vec::new(), Compression::default());

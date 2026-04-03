@@ -8,9 +8,6 @@ name = "bench_disk_rand"
 path = "src/lib.rs"
 
 [dependencies]
-serde = { version = ">=1.0, <1.0.100", features = ["derive"] }
-serde_json = ">=1.0, <1.0.56"
-serde_derive = ">=1.0, <1.0.100"
-ryu = ">=1.0, <1.0.10"
-getrandom = "0.1"
-rand = "0.7"
+serde = "=1.0.91"
+serde_json = "=1.0.39"
+serde_derive = "=1.0.91"

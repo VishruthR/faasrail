@@ -1,7 +1,7 @@
 extern crate serde_json;
-extern crate getrandom;
-#[macro_use] extern crate serde_derive;
+extern crate serde_derive;
 
+use serde_derive::{Deserialize, Serialize};
 use serde_json::{Error, Value};
 use std::fs::{self, File};
 use std::io::{Read, Write};
@@ -33,6 +33,13 @@ fn black_box<T>(dummy: T) -> T {
     }
 }
 
+fn fill_bytes(buf: &mut [u8]) {
+    for (i, b) in buf.iter_mut().enumerate() {
+        let i = i as u32;
+        *b = ((i.wrapping_mul(131) ^ 0xA5) % 256) as u8;
+    }
+}
+
 pub fn main(args: Value) -> Result<Value, Error> {
     let input: Input = serde_json::from_value(args)?;
     let total_bytes = input.file_size * 1024 * 1024;
@@ -40,7 +47,7 @@ pub fn main(args: Value) -> Result<Value, Error> {
     let path = "./bench_disk_seq.bin";
 
     let mut block = vec![0u8; block_size];
-    getrandom::getrandom(&mut block).expect("getrandom failed");
+    fill_bytes(&mut block);
 
     let write_start = std::time::Instant::now();
     {
