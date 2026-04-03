@@ -1,11 +1,15 @@
 [package]
 name = "bench-disk-rand"
 version = "0.1.0"
-edition = "2018"
+edition = "2015"
+
+[lib]
+name = "bench_disk_rand"
+path = "src/lib.rs"
 
 [dependencies]
-bench-common = { path = "../bench-common" }
 serde = { version = ">=1.0, <1.0.100", features = ["derive"] }
 serde_json = ">=1.0, <1.0.56"
+serde_derive = ">=1.0, <1.0.100"
 getrandom = "0.1"
 rand = "0.7"

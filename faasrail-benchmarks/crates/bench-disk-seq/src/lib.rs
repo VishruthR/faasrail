@@ -1,8 +1,16 @@
-use bench_common::{black_box, write_output, Timer};
-use serde::Serialize;
+extern crate serde_json;
+extern crate getrandom;
+#[macro_use] extern crate serde_derive;
+
+use serde_json::{Error, Value};
 use std::fs::{self, File};
 use std::io::{Read, Write};
-use std::env;
+
+#[derive(Deserialize)]
+struct Input {
+    byte_size: usize,
+    file_size: usize,
+}
 
 #[derive(Serialize)]
 struct Output {
@@ -11,21 +19,30 @@ struct Output {
     total_elapsed_ms: f64,
 }
 
-fn main() {
-    let args: Vec<String> = env::args().collect();
+fn elapsed_ms(start: std::time::Instant) -> f64 {
+    let d = start.elapsed();
+    (d.as_secs() as f64) * 1_000.0 + (d.subsec_nanos() as f64) / 1_000_000.0
+}
 
-    let byte_size = args[1].parse::<usize>().unwrap();
-    let file_size = args[2].parse::<usize>().unwrap();
-    let total_bytes = file_size * 1024 * 1024;
-    let block_size = byte_size;
+#[inline]
+fn black_box<T>(dummy: T) -> T {
+    unsafe {
+        let ret = std::ptr::read_volatile(&dummy as *const T);
+        std::mem::forget(dummy);
+        ret
+    }
+}
+
+pub fn main(args: Value) -> Result<Value, Error> {
+    let input: Input = serde_json::from_value(args)?;
+    let total_bytes = input.file_size * 1024 * 1024;
+    let block_size = input.byte_size;
     let path = "./bench_disk_seq.bin";
 
-    // Generate one block of random data to write repeatedly
     let mut block = vec![0u8; block_size];
     getrandom::getrandom(&mut block).expect("getrandom failed");
 
-    // Sequential write
-    let write_timer = Timer::start();
+    let write_start = std::time::Instant::now();
     {
         let mut f = File::create(path).expect("failed to create file");
         let mut written = 0;
@@ -36,30 +53,27 @@ fn main() {
         }
         f.flush().expect("flush failed");
     }
-    let write_elapsed_ms = write_timer.elapsed_ms();
+    let write_elapsed_ms = elapsed_ms(write_start);
 
-    // Sequential read
-    let read_timer = Timer::start();
+    let read_start = std::time::Instant::now();
     {
         let mut f = File::open(path).expect("failed to open file");
         let mut buf = vec![0u8; block_size];
         let mut total_read = 0;
         loop {
             let n = f.read(&mut buf).expect("read failed");
-            if n == 0 {
-                break;
-            }
+            if n == 0 { break; }
             total_read += n;
         }
         black_box(total_read);
     }
-    let read_elapsed_ms = read_timer.elapsed_ms();
+    let read_elapsed_ms = elapsed_ms(read_start);
 
     let _ = fs::remove_file(path);
 
-    write_output(&Output {
+    serde_json::to_value(Output {
         write_elapsed_ms,
         read_elapsed_ms,
         total_elapsed_ms: write_elapsed_ms + read_elapsed_ms,
-    });
+    })
 }

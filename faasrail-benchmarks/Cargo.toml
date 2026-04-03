@@ -1,6 +1,5 @@
 [workspace]
 members = [
-    "crates/bench-common",
     "crates/bench-float",
     "crates/bench-json",
     "crates/bench-chameleon",

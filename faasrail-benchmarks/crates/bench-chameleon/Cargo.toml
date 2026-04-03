@@ -1,9 +1,13 @@
 [package]
 name = "bench-chameleon"
 version = "0.1.0"
-edition = "2018"
+edition = "2015"
+
+[lib]
+name = "bench_chameleon"
+path = "src/lib.rs"
 
 [dependencies]
-bench-common = { path = "../bench-common" }
 serde = { version = ">=1.0, <1.0.100", features = ["derive"] }
 serde_json = ">=1.0, <1.0.56"
+serde_derive = ">=1.0, <1.0.100"
