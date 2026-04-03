@@ -1,7 +1,6 @@
-use bench_common::{write_output, Timer};
-use std::env;
+use bench_common::{black_box, write_output, Timer};
 use serde::Serialize;
-use std::hint::black_box;
+use std::env;
 
 #[derive(Serialize)]
 struct Output {
@@ -18,7 +17,7 @@ fn render_table(rows: usize, cols: usize) -> String {
             html.push_str("    <td>");
             // Alternate between string and numeric content like the original benchmark
             if c % 2 == 0 {
-                html.push_str(&format!("Row {r}, Col {c}"));
+                html.push_str(&format!("Row {}, Col {}", r, c));
             } else {
                 html.push_str(&format!("{}", r * cols + c));
             }
@@ -32,7 +31,7 @@ fn render_table(rows: usize, cols: usize) -> String {
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    
+
     let num_of_cols = args[1].parse::<usize>().unwrap();
     let num_of_rows = args[2].parse::<usize>().unwrap();
     let timer = Timer::start();

@@ -1,7 +1,6 @@
-use bench_common::{write_output, Timer};
+use bench_common::{black_box, write_output, Timer};
 use serde::Serialize;
 use std::fs::{self, File};
-use std::hint::black_box;
 use std::io::{Read, Write};
 use std::env;
 

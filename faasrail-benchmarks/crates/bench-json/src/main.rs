@@ -1,6 +1,5 @@
-use bench_common::{write_output, Timer};
+use bench_common::{black_box, write_output, Timer};
 use serde::Serialize;
-use std::hint::black_box;
 use std::env;
 
 #[derive(Serialize)]
@@ -18,7 +17,7 @@ fn main() {
 
     // Deserialize the JSON string into a generic Value
     let parsed: serde_json::Value =
-        serde_json::from_str(&json_string).expect("invalid json_string");
+        serde_json::from_str(json_string).expect("invalid json_string");
 
     // Re-serialize back to string
     let serialized = serde_json::to_string(&parsed).expect("failed to serialize");

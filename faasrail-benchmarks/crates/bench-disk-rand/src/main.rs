@@ -1,8 +1,7 @@
-use bench_common::{write_output, Timer};
+use bench_common::{black_box, write_output, Timer};
 use rand::Rng;
 use serde::Serialize;
-use std::fs::{self, File};
-use std::hint::black_box;
+use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::env;
 
@@ -41,12 +40,12 @@ fn main() {
     // Random write: seek to random block-aligned offsets and write
     let write_timer = Timer::start();
     {
-        let mut f = File::options()
+        let mut f = OpenOptions::new()
             .write(true)
             .open(path)
             .expect("failed to open for writing");
         for _ in 0..num_blocks {
-            let block_idx = rng.gen_range(0..num_blocks);
+            let block_idx = rng.gen_range(0, num_blocks);
             let offset = (block_idx * block_size) as u64;
             f.seek(SeekFrom::Start(offset)).expect("seek failed");
             f.write_all(&block).expect("write failed");
@@ -62,7 +61,7 @@ fn main() {
         let mut buf = vec![0u8; block_size];
         let mut total_read = 0usize;
         for _ in 0..num_blocks {
-            let block_idx = rng.gen_range(0..num_blocks);
+            let block_idx = rng.gen_range(0, num_blocks);
             let offset = (block_idx * block_size) as u64;
             f.seek(SeekFrom::Start(offset)).expect("seek failed");
             let n = f.read(&mut buf).expect("read failed");

@@ -1,6 +1,5 @@
-use bench_common::{write_output, Timer};
+use bench_common::{black_box, write_output, Timer};
 use serde::Serialize;
-use std::hint::black_box;
 use std::env;
 
 #[derive(Serialize)]

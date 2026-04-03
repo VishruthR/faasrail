@@ -1,9 +1,8 @@
-use bench_common::{write_output, Timer};
+use bench_common::{black_box, write_output, Timer};
 use flate2::write::GzEncoder;
 use flate2::Compression;
 use serde::Serialize;
 use std::fs;
-use std::hint::black_box;
 use std::io::Write;
 use std::env;
 

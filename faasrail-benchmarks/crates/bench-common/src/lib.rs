@@ -41,7 +41,7 @@ pub fn read_input<T: DeserializeOwned>(fields: &[&str]) -> T {
 /// Serialize `value` as JSON and write to stdout.
 pub fn write_output<T: Serialize>(value: &T) {
     let out = serde_json::to_string(value).expect("failed to serialize output");
-    println!("{out}");
+    println!("{}", out);
 }
 
 /// Simple timer wrapping `std::time::Instant`.
@@ -56,6 +56,21 @@ impl Timer {
 
     /// Returns elapsed time in milliseconds as f64.
     pub fn elapsed_ms(&self) -> f64 {
-        self.start.elapsed().as_secs_f64() * 1000.0
+        let d = self.start.elapsed();
+        (d.as_secs() as f64) * 1_000.0 + (d.subsec_nanos() as f64) / 1_000_000.0
+    }
+}
+
+/// Prevent the compiler from optimizing away a value.
+///
+/// Substitute for `std::hint::black_box` (stabilized in Rust 1.66).
+/// Uses a volatile read to defeat dead-code elimination without
+/// changing the value semantics.
+#[inline]
+pub fn black_box<T>(dummy: T) -> T {
+    unsafe {
+        let ret = std::ptr::read_volatile(&dummy as *const T);
+        std::mem::forget(dummy);
+        ret
     }
 }

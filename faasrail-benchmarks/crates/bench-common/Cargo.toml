@@ -1,8 +1,8 @@
 [package]
 name = "bench-common"
 version = "0.1.0"
-edition = "2021"
+edition = "2018"
 
 [dependencies]
-serde = { workspace = true }
-serde_json = { workspace = true }
+serde = { version = ">=1.0, <1.0.100", features = ["derive"] }
+serde_json = ">=1.0, <1.0.56"

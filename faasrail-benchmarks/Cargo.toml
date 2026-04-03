@@ -1,22 +1,10 @@
 [workspace]
-resolver = "2"
 members = [
     "crates/bench-common",
     "crates/bench-float",
     "crates/bench-json",
     "crates/bench-chameleon",
-    "crates/bench-aes",
     "crates/bench-gzip",
     "crates/bench-disk-seq",
     "crates/bench-disk-rand",
 ]
-
-[workspace.dependencies]
-bench-common = { path = "crates/bench-common" }
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-getrandom = { version = "0.2" }
-rand = { version = "0.8", default-features = false, features = ["std", "std_rng"] }
-aes = "0.8"
-ctr = "0.9"
-flate2 = { version = "1", default-features = false, features = ["miniz_oxide"] }
