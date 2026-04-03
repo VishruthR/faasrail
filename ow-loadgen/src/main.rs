@@ -73,6 +73,17 @@ struct Args {
     /// Print the execution plan without invoking any actions
     #[arg(long)]
     dry_run: bool,
+
+    /// Disable gradual ramp (legacy: every trace minute is one 60s window at full N).
+    /// When enabled (default), wall-clock minute 0 ramps toward column-1 rates (30s at N/5, 30s at
+    /// N/2 using each row's minute-1 target N), then minutes 1..K run at normal full pace (60s each).
+    #[arg(long)]
+    no_ramp: bool,
+
+    /// Multiply each row's requests-per-minute from the trace by this factor (default: 1.0).
+    /// Ramp phases use the same scaled target N as the first column (N/5, then N/2, then full N).
+    #[arg(long, default_value_t = 1.0)]
+    rps_scale_factor: f64,
 }
 
 // ── Config & data structures ──────────────────────────────────────────────────
@@ -93,14 +104,16 @@ struct Invocation {
     bench_type: String,
     action_name: String,
     payload: Value,
-    minute: usize,
+    /// Logical minute label (e.g. 0, 0.5, 1.0 for first trace minute with ramp; 1.0 only with --no-ramp).
+    logical_minute: f64,
 }
 
 /// One line written to the NDJSON output file.
 #[derive(Serialize, Deserialize)]
 struct InvocationRecord {
     bench: String,
-    minute: usize,
+    /// Trace timeline index (fractional when using gradual ramp: 0, 0.5, 1, 1.5, 2, …).
+    minute: f64,
     /// Unix timestamp (µs) when the HTTP request was dispatched.
     issued_at_us: u64,
     /// Round-trip HTTP latency in µs.
@@ -237,31 +250,176 @@ fn filter_rows(rows: Vec<TraceRow>, max_per_bench: usize) -> Vec<TraceRow> {
 
 // ── Plan printing ─────────────────────────────────────────────────────────────
 
-fn print_plan(rows: &[TraceRow], minutes_to_run: usize) {
+/// Requests per minute from the trace, multiplied by `scale` and rounded to the nearest integer.
+fn scaled_rpm(n: u32, scale: f64) -> u32 {
+    if n == 0 {
+        return 0;
+    }
+    let v = n as f64 * scale;
+    if !v.is_finite() || v <= 0.0 {
+        return 0;
+    }
+    let r = v.round();
+    if r >= u32::MAX as f64 {
+        u32::MAX
+    } else {
+        r as u32
+    }
+}
+
+/// Ramp segment sizes for minute 0: first 30s = (scaled N)/5, second 30s = (scaled N)/2,
+/// where `N` is trace column 0 — same `scaled_rpm` as steady minutes, so scale applies to ramp too.
+fn scaled_ramp_count(n_trace_col0: u32, phase_id: u8, scale: f64) -> u32 {
+    let n = scaled_rpm(n_trace_col0, scale);
+    match phase_id {
+        0 => n / 5,
+        1 => n / 2,
+        _ => n,
+    }
+}
+
+fn print_plan(rows: &[TraceRow], minutes_to_run: usize, gradual_ramp: bool, rps_scale_factor: f64) {
     let mut grand_total: u64 = 0;
 
-    for minute in 0..minutes_to_run {
-        let mut counts: HashMap<&str, u64> = HashMap::new();
+    if gradual_ramp && minutes_to_run > 0 {
+        let mut c05: HashMap<&str, u64> = HashMap::new();
+        let mut c15: HashMap<&str, u64> = HashMap::new();
         for row in rows {
-            let n = *row.rpm.get(minute).unwrap_or(&0) as u64;
-            *counts.entry(&row.bench_type).or_default() += n;
+            let n0 = *row.rpm.get(0).unwrap_or(&0);
+            *c05.entry(&row.bench_type).or_default() +=
+                u64::from(scaled_ramp_count(n0, 0, rps_scale_factor));
+            *c15.entry(&row.bench_type).or_default() +=
+                u64::from(scaled_ramp_count(n0, 1, rps_scale_factor));
         }
-        let total: u64 = counts.values().sum();
-        grand_total += total;
+        let t05: u64 = c05.values().sum();
+        let t15: u64 = c15.values().sum();
+        grand_total += t05 + t15;
+        eprintln!(
+            "  minute 0 (ramp):  [0–30s] {:>5} total (N/5)  |  [30–60s] {:>5} (N/2)  [N = col1 × scale]",
+            t05,
+            t15,
+        );
+    }
 
-        let mut parts: Vec<_> = counts.into_iter().collect();
-        parts.sort_by_key(|(name, _)| *name);
-        let breakdown: Vec<String> =
-            parts.iter().map(|(name, count)| format!("{name}={count}")).collect();
+    for minute in 0..minutes_to_run {
+        let mut counts_full: HashMap<&str, u64> = HashMap::new();
+        for row in rows {
+            let n = scaled_rpm(*row.rpm.get(minute).unwrap_or(&0), rps_scale_factor) as u64;
+            *counts_full.entry(&row.bench_type).or_default() += n;
+        }
+        let total_full: u64 = counts_full.values().sum();
+        grand_total += total_full;
 
         eprintln!(
             "  minute {:>2}: {:>5} total  [{}]",
             minute + 1,
-            total,
-            breakdown.join(", ")
+            total_full,
+            fmt_breakdown(&counts_full),
         );
     }
-    eprintln!("  grand total: {grand_total} invocations across {minutes_to_run} minutes");
+
+    let wall_min = minutes_to_run + usize::from(gradual_ramp && minutes_to_run > 0);
+    eprintln!(
+        "  grand total: {grand_total} invocations; ~{wall_min} min wall-clock{}",
+        if gradual_ramp && minutes_to_run > 0 {
+            " (+ minute 0 ramp)"
+        } else {
+            ""
+        }
+    );
+}
+
+fn fmt_breakdown(counts: &HashMap<&str, u64>) -> String {
+    let mut parts: Vec<_> = counts.iter().collect();
+    parts.sort_by_key(|(name, _)| **name);
+    parts
+        .iter()
+        .map(|(name, count)| format!("{name}={count}"))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn spawn_invocation(
+    client: &Client,
+    config: &WskConfig,
+    namespace: &str,
+    blocking: bool,
+    inv: Invocation,
+    phase_deadline: Instant,
+    semaphore: &Arc<Semaphore>,
+    total_ok: &Arc<AtomicU64>,
+    total_err: &Arc<AtomicU64>,
+    writer: &Arc<Mutex<BufWriter<std::fs::File>>>,
+) {
+    let client = client.clone();
+    let auth = config.auth_header.clone();
+    let url = format!(
+        "{}/api/v1/namespaces/{}/actions/{}?blocking={}&result=false",
+        config.api_host, namespace, inv.action_name, blocking,
+    );
+    let sem = semaphore.clone();
+    let ok = total_ok.clone();
+    let err = total_err.clone();
+    let writer = writer.clone();
+    let timeout = phase_deadline
+        .saturating_duration_since(Instant::now())
+        .max(Duration::from_secs(1));
+
+    tokio::spawn(async move {
+        let _permit = sem.acquire().await.unwrap();
+
+        let issued_at_us = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_micros() as u64;
+
+        let t_start = Instant::now();
+        let result = client
+            .post(&url)
+            .header("Authorization", &auth)
+            .timeout(timeout)
+            .json(&inv.payload)
+            .send()
+            .await;
+        let latency_us = t_start.elapsed().as_micros() as u64;
+
+        match result {
+            Ok(resp) => {
+                let status_code = resp.status().as_u16();
+                let body = resp.json::<Value>().await.unwrap_or_default();
+                let activation_id = body["activationId"].as_str().map(str::to_owned);
+
+                if status_code < 300 || status_code == 202 {
+                    ok.fetch_add(1, Ordering::Relaxed);
+                } else {
+                    eprintln!(
+                        "  WARN {}: HTTP {status_code} — {}",
+                        inv.action_name,
+                        body.to_string()
+                    );
+                    err.fetch_add(1, Ordering::Relaxed);
+                }
+
+                let record = InvocationRecord {
+                    bench: inv.bench_type,
+                    minute: inv.logical_minute,
+                    issued_at_us,
+                    latency_us,
+                    status_code,
+                    activation_id,
+                };
+                if let Ok(mut line) = serde_json::to_string(&record) {
+                    line.push('\n');
+                    let mut w = writer.lock().await;
+                    let _ = w.write_all(line.as_bytes());
+                }
+            }
+            Err(e) => {
+                eprintln!("  ERROR {}: {e}", inv.action_name);
+                err.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+    });
 }
 
 // ── Entry point ───────────────────────────────────────────────────────────────
@@ -297,9 +455,27 @@ async fn main() {
     eprintln!("  total: {} rows\n", rows.len());
 
     let minutes_to_run = args.minutes.unwrap_or(total_minutes).min(total_minutes);
+    let gradual_ramp = !args.no_ramp;
 
-    eprintln!("Execution plan ({minutes_to_run} minutes):");
-    print_plan(&rows, minutes_to_run);
+    let rps_scale_factor = args.rps_scale_factor;
+    if !rps_scale_factor.is_finite() || rps_scale_factor <= 0.0 {
+        eprintln!(
+            "error: --rps-scale-factor must be finite and > 0 (got {rps_scale_factor})"
+        );
+        std::process::exit(1);
+    }
+
+    eprintln!("RPS scale:     {rps_scale_factor}× (trace RPM × factor, rounded per row/minute)");
+    eprintln!(
+        "Gradual ramp: {}",
+        if gradual_ramp {
+            "on (minute 0: 30s N/5 + 30s N/2 from col 1; minutes 1–K: 60s full N)"
+        } else {
+            "off (--no-ramp)"
+        }
+    );
+    eprintln!("Execution plan ({minutes_to_run} trace minutes):");
+    print_plan(&rows, minutes_to_run, gradual_ramp, rps_scale_factor);
     eprintln!();
 
     if args.dry_run {
@@ -339,143 +515,207 @@ async fn main() {
 
     let experiment_start = Instant::now();
 
-    'minutes: for minute in 0..minutes_to_run {
-        let minute_start    = Instant::now();
-        let minute_deadline = minute_start + Duration::from_secs(60);
+    'run: {
+        // Minute 0: ramp only (N from trace column 0 per row); minutes 1..K = 60s full N each.
+        if gradual_ramp && minutes_to_run > 0 {
+        let trace_block_start = Instant::now();
+        let trace_block_secs = 60u64;
+        let phases = vec![
+            (30u64, 0u8, 0.0f64, "ramp N/5"),
+            (30u64, 1u8, 0.5f64, "ramp N/2"),
+        ];
+        let mut phase_offset = Duration::ZERO;
+        for (phase_secs, phase_id, logical_minute, phase_label) in phases {
+            let phase_start = trace_block_start + phase_offset;
+            let phase_deadline = phase_start + Duration::from_secs(phase_secs);
+            phase_offset += Duration::from_secs(phase_secs);
 
-        // Collect all invocations for this minute across all rows
-        let mut invocations: Vec<Invocation> = Vec::new();
-        for row in &rows {
-            let count = *row.rpm.get(minute).unwrap_or(&0);
-            for _ in 0..count {
-                invocations.push(Invocation {
-                    bench_type:  row.bench_type.clone(),
-                    action_name: row.action_name.clone(),
-                    payload:     row.payload.clone(),
-                    minute:      minute + 1,
-                });
+            let mut invocations: Vec<Invocation> = Vec::new();
+            for row in &rows {
+                let n0 = *row.rpm.get(0).unwrap_or(&0);
+                let count = scaled_ramp_count(n0, phase_id, rps_scale_factor);
+                for _ in 0..count {
+                    invocations.push(Invocation {
+                        bench_type: row.bench_type.clone(),
+                        action_name: row.action_name.clone(),
+                        payload: row.payload.clone(),
+                        logical_minute,
+                    });
+                }
             }
-        }
 
-        let n = invocations.len();
-        if n == 0 {
-            eprintln!("[minute {:>2}] no invocations, sleeping 60s", minute + 1);
-            tokio::select! {
-                _ = sleep(Duration::from_secs(60)) => {}
-                _ = shutdown.notified() => break 'minutes,
-            }
-            continue;
-        }
-
-        // Shuffle so bench types are interleaved throughout the minute
-        invocations.shuffle(&mut rand::thread_rng());
-
-        eprintln!(
-            "[minute {:>2}] dispatching {} invocations ({:.1} rps)",
-            minute + 1,
-            n,
-            n as f64 / 60.0,
-        );
-
-        for (i, inv) in invocations.into_iter().enumerate() {
-            // Equidistant spacing across the 60-second window
-            let target = minute_start + Duration::from_secs_f64(60.0 * i as f64 / n as f64);
-            let now = Instant::now();
-            if target > now {
+            let n_inv = invocations.len();
+            if n_inv == 0 {
+                eprintln!(
+                    "[minute 0 | {:<10} | {:.1}] no invocations, sleeping {}s",
+                    phase_label, logical_minute, phase_secs,
+                );
                 tokio::select! {
-                    _ = sleep(target - now) => {}
-                    _ = shutdown.notified() => break 'minutes,
+                    _ = sleep(Duration::from_secs(phase_secs)) => {}
+                    _ = shutdown.notified() => break 'run,
                 }
+                continue;
             }
 
-            let client   = client.clone();
-            let auth     = config.auth_header.clone();
-            let url      = format!(
-                "{}/api/v1/namespaces/{}/actions/{}?blocking={}&result=false",
-                config.api_host, args.namespace, inv.action_name, args.blocking,
+            invocations.shuffle(&mut rand::thread_rng());
+            eprintln!(
+                "[minute 0 | {:<10} | {:.1}] dispatching {} invocations over {}s ({:.2} rps)",
+                phase_label,
+                logical_minute,
+                n_inv,
+                phase_secs,
+                n_inv as f64 / phase_secs as f64,
             );
-            let sem      = semaphore.clone();
-            let ok       = total_ok.clone();
-            let err      = total_err.clone();
-            let writer   = writer.clone();
-            // Bound each request to the remaining time in this minute (min 1s)
-            let timeout  = minute_deadline
-                .saturating_duration_since(Instant::now())
-                .max(Duration::from_secs(1));
 
-            tokio::spawn(async move {
-                let _permit = sem.acquire().await.unwrap();
-
-                let issued_at_us = SystemTime::now()
-                    .duration_since(UNIX_EPOCH)
-                    .unwrap_or_default()
-                    .as_micros() as u64;
-
-                let t_start = Instant::now();
-                let result  = client
-                    .post(&url)
-                    .header("Authorization", &auth)
-                    .timeout(timeout)
-                    .json(&inv.payload)
-                    .send()
-                    .await;
-                let latency_us = t_start.elapsed().as_micros() as u64;
-
-                match result {
-                    Ok(resp) => {
-                        let status_code = resp.status().as_u16();
-                        // Parse body for activation ID (best-effort)
-                        let body = resp.json::<Value>().await.unwrap_or_default();
-                        let activation_id =
-                            body["activationId"].as_str().map(str::to_owned);
-
-                        if status_code < 300 || status_code == 202 {
-                            ok.fetch_add(1, Ordering::Relaxed);
-                        } else {
-                            eprintln!(
-                                "  WARN {}: HTTP {status_code} — {}",
-                                inv.action_name,
-                                body.to_string()
-                            );
-                            err.fetch_add(1, Ordering::Relaxed);
-                        }
-
-                        let record = InvocationRecord {
-                            bench: inv.bench_type,
-                            minute: inv.minute,
-                            issued_at_us,
-                            latency_us,
-                            status_code,
-                            activation_id,
-                        };
-                        if let Ok(mut line) = serde_json::to_string(&record) {
-                            line.push('\n');
-                            let mut w = writer.lock().await;
-                            let _ = w.write_all(line.as_bytes());
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("  ERROR {}: {e}", inv.action_name);
-                        err.fetch_add(1, Ordering::Relaxed);
+            for (i, inv) in invocations.into_iter().enumerate() {
+                let target = phase_start
+                    + Duration::from_secs_f64(phase_secs as f64 * i as f64 / n_inv as f64);
+                let now = Instant::now();
+                if target > now {
+                    tokio::select! {
+                        _ = sleep(target - now) => {}
+                        _ = shutdown.notified() => break 'run,
                     }
                 }
-            });
-        }
 
-        // Wait for the remainder of the minute
-        let elapsed = minute_start.elapsed();
-        if elapsed < Duration::from_secs(60) {
-            tokio::select! {
-                _ = sleep(Duration::from_secs(60) - elapsed) => {}
-                _ = shutdown.notified() => break 'minutes,
+                spawn_invocation(
+                    &client,
+                    &config,
+                    &args.namespace,
+                    args.blocking,
+                    inv,
+                    phase_deadline,
+                    &semaphore,
+                    &total_ok,
+                    &total_err,
+                    &writer,
+                );
+            }
+
+            let phase_remain = phase_deadline.saturating_duration_since(Instant::now());
+            if !phase_remain.is_zero() {
+                tokio::select! {
+                    _ = sleep(phase_remain) => {}
+                    _ = shutdown.notified() => break 'run,
+                }
             }
         }
 
+        let block_deadline = trace_block_start + Duration::from_secs(trace_block_secs);
+        let block_remain = block_deadline.saturating_duration_since(Instant::now());
+        if !block_remain.is_zero() {
+            tokio::select! {
+                _ = sleep(block_remain) => {}
+                _ = shutdown.notified() => break 'run,
+            }
+        }
         eprintln!(
             "  ok={}, err={}",
             total_ok.load(Ordering::Relaxed),
             total_err.load(Ordering::Relaxed),
         );
+        }
+
+        for minute in 0..minutes_to_run {
+        let trace_block_start = Instant::now();
+        let trace_block_secs = 60u64;
+        let phases = vec![(60u64, 2u8, (minute + 1) as f64, "steady")];
+
+        let mut phase_offset = Duration::ZERO;
+        for (phase_secs, phase_id, logical_minute, phase_label) in phases {
+            let phase_start = trace_block_start + phase_offset;
+            let phase_deadline = phase_start + Duration::from_secs(phase_secs);
+            phase_offset += Duration::from_secs(phase_secs);
+
+            let mut invocations: Vec<Invocation> = Vec::new();
+            for row in &rows {
+                let count = scaled_rpm(*row.rpm.get(minute).unwrap_or(&0), rps_scale_factor);
+                for _ in 0..count {
+                    invocations.push(Invocation {
+                        bench_type: row.bench_type.clone(),
+                        action_name: row.action_name.clone(),
+                        payload: row.payload.clone(),
+                        logical_minute,
+                    });
+                }
+            }
+
+            let n = invocations.len();
+            if n == 0 {
+                eprintln!(
+                    "[minute {:>2} | {:<10} | {:.1}] no invocations, sleeping {}s",
+                    minute + 1,
+                    phase_label,
+                    logical_minute,
+                    phase_secs,
+                );
+                tokio::select! {
+                    _ = sleep(Duration::from_secs(phase_secs)) => {}
+                    _ = shutdown.notified() => break 'run,
+                }
+                continue;
+            }
+
+            invocations.shuffle(&mut rand::thread_rng());
+
+            eprintln!(
+                "[minute {:>2} | {:<10} | {:.1}] dispatching {} invocations over {}s ({:.2} rps)",
+                minute + 1,
+                phase_label,
+                logical_minute,
+                n,
+                phase_secs,
+                n as f64 / phase_secs as f64,
+            );
+
+            for (i, inv) in invocations.into_iter().enumerate() {
+                let target = phase_start
+                    + Duration::from_secs_f64(phase_secs as f64 * i as f64 / n as f64);
+                let now = Instant::now();
+                if target > now {
+                    tokio::select! {
+                        _ = sleep(target - now) => {}
+                        _ = shutdown.notified() => break 'run,
+                    }
+                }
+
+                spawn_invocation(
+                    &client,
+                    &config,
+                    &args.namespace,
+                    args.blocking,
+                    inv,
+                    phase_deadline,
+                    &semaphore,
+                    &total_ok,
+                    &total_err,
+                    &writer,
+                );
+            }
+
+            let phase_remain = phase_deadline.saturating_duration_since(Instant::now());
+            if !phase_remain.is_zero() {
+                tokio::select! {
+                    _ = sleep(phase_remain) => {}
+                    _ = shutdown.notified() => break 'run,
+                }
+            }
+        }
+
+        let block_deadline = trace_block_start + Duration::from_secs(trace_block_secs);
+        let block_remain = block_deadline.saturating_duration_since(Instant::now());
+        if !block_remain.is_zero() {
+            tokio::select! {
+                _ = sleep(block_remain) => {}
+                _ = shutdown.notified() => break 'run,
+            }
+        }
+        eprintln!(
+            "  ok={}, err={}",
+            total_ok.load(Ordering::Relaxed),
+            total_err.load(Ordering::Relaxed),
+        );
+        }
     }
 
     // Give in-flight requests a few seconds to land
