@@ -12,11 +12,9 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CRATES_DIR="$SCRIPT_DIR/crates"
+BINARIES_DIR="$SCRIPT_DIR/target/x86_64-unknown-linux-musl/release"
 RUNS=${RUNS:-5}
 OUTPUT="${1:-workloads-rust-code.json}"
-
-RUST_KIND=${RUST_KIND:-rust:1.34}
-OW_RUST_DOCKER=${OW_RUST_DOCKER:-}
 
 if ! command -v wsk &>/dev/null; then
     echo "error: wsk not found in PATH" >&2
@@ -38,39 +36,38 @@ BENCHMARKS=(
     "chameleon|bench-chameleon|bench_chameleon|elapsed_ms"
     "disk-seq|bench-disk-seq|bench_disk_seq|total_elapsed_ms"
     "disk-rand|bench-disk-rand|bench_disk_rand|total_elapsed_ms"
+    "gzip|bench-gzip|bench_gzip|elapsed_ms"
+    "aes|bench-aes|bench_aes|elapsed_ms"
 )
 
 deploy_rust_single() {
     local action_name=$1
-    local rs_path=$2
+    local binary_path=$2
 
     wsk action delete "$action_name" -i >/dev/null 2>&1 || true
 
-    local -a create_cmd=(wsk action create "$action_name" "$rs_path" -i)
-    if [ -n "${OW_RUST_DOCKER}" ]; then
-        create_cmd+=(--docker "$OW_RUST_DOCKER")
-    else
-        create_cmd+=(--kind "$RUST_KIND")
-    fi
+    echo $binary_path
+    cp $binary_path ./exec
+    zip -o archive.zip exec
 
-    "${create_cmd[@]}" 2>&1 | tail -1
+    local -a create_cmd=(wsk action create "$action_name" --native "archive.zip" -i)
+
+    "${create_cmd[@]}"
+
+    rm exec
+    rm archive.zip
 }
 
-if [ -n "${OW_RUST_DOCKER}" ]; then
-    echo "Deploying Rust actions (docker image: ${OW_RUST_DOCKER})..."
-else
-    echo "Deploying Rust actions (single .rs, kind: ${RUST_KIND})..."
-fi
 for entry in "${BENCHMARKS[@]}"; do
     IFS='|' read -r bench_key crate_dir action_name _elapsed <<< "$entry"
 
-    rs_path="$CRATES_DIR/$crate_dir/src/lib.rs"
-    if [ ! -f "$rs_path" ]; then
-        echo "error: missing $rs_path" >&2
+    binary_path="$BINARIES_DIR/$crate_dir"
+    if [ ! -f "$binary_path" ]; then
+        echo "error: missing $binary_path" >&2
         exit 1
     fi
-    deploy_rust_single "$action_name" "$rs_path"
-    echo "  deployed: $action_name ($rs_path)"
+    deploy_rust_single "$action_name" "$binary_path"
+    echo "  deployed: $action_name ($binary_path)"
 done
 echo ""
 
@@ -84,9 +81,11 @@ for entry in "${BENCHMARKS[@]}"; do
     case "$bench_key" in
         float)      payload='{"n": 10000}' ;;
         json)       payload='{"json_string": "{\"a\":1,\"b\":[1,2,3]}"}' ;;
-        chameleon)  payload='{"num_of_cols": 100, "num_of_rows": 100}' ;;
+        chameleon)  payload='{"num_of_cols": 10, "num_of_rows": 100}' ;;
         disk-seq)   payload='{"byte_size": 4096, "file_size": 1}' ;;
         disk-rand)  payload='{"byte_size": 4096, "file_size": 1}' ;;
+        gzip)       payload='{"file_size": 1}' ;;
+        aes)        payload='{"message_length": 256, "num_iterations": 10}' ;;
         *)
             echo "error: unknown bench_key $bench_key" >&2
             exit 1

@@ -1,5 +1,8 @@
 [workspace]
+resolver = "2"
 members = [
+    "crates/bench-common",
+    "crates/bench-aes",
     "crates/bench-float",
     "crates/bench-json",
     "crates/bench-chameleon",
