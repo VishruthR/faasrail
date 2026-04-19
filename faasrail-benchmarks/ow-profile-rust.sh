@@ -13,7 +13,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 CRATES_DIR="$SCRIPT_DIR/crates"
 BINARIES_DIR="$SCRIPT_DIR/target/x86_64-unknown-linux-musl/release"
-RUNS=${RUNS:-5}
+RUNS=${RUNS:-10}
 OUTPUT="${1:-workloads-rust-code.json}"
 
 if ! command -v wsk &>/dev/null; then
@@ -79,13 +79,13 @@ for entry in "${BENCHMARKS[@]}"; do
     IFS='|' read -r bench_key crate_dir action_name elapsed_field <<< "$entry"
 
     case "$bench_key" in
-        float)      payload='{"n": 10000}' ;;
+        float)      payload='{"n": 100000}' ;;
         json)       payload='{"json_string": "{\"a\":1,\"b\":[1,2,3]}"}' ;;
-        chameleon)  payload='{"num_of_cols": 10, "num_of_rows": 100}' ;;
+        chameleon)  payload='{"num_of_cols": 100, "num_of_rows": 100}' ;;
         disk-seq)   payload='{"byte_size": 4096, "file_size": 1}' ;;
-        disk-rand)  payload='{"byte_size": 4096, "file_size": 1}' ;;
-        gzip)       payload='{"file_size": 1}' ;;
-        aes)        payload='{"message_length": 256, "num_iterations": 10}' ;;
+        disk-rand)  payload='{"byte_size": 4096, "file_size": 30}' ;;
+        gzip)       payload='{"file_size": 30}' ;;
+        aes)        payload='{"message_length": 4096, "num_iterations": 2000}' ;;
         *)
             echo "error: unknown bench_key $bench_key" >&2
             exit 1
@@ -109,6 +109,8 @@ for entry in "${BENCHMARKS[@]}"; do
         sum_sq=$(echo "$sum_sq + $ms * $ms" | bc -l)
         printf "  run %d/%d: %.2f ms\n" "$i" "$RUNS" "$ms"
     done
+
+    sleep 10
 
     rm -f "$payload_file"
 
