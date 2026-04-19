@@ -117,6 +117,17 @@ def parse_args(args: list[str]) -> argparse.Namespace:
             "this parameter defines the first minute of the range"
         ),
     )
+    parser_spec.add_argument(
+        "--cap-bench-volume-frac",
+        action="append",
+        default=None,
+        metavar="BENCH:FRAC",
+        help=(
+            "After building the spec, cap this benchmark's share of total invocations "
+            "(sum of all minute columns). FRAC in (0,1), e.g. gzip:0.1 for at most ~10%%. "
+            "Repeat for multiple benchmarks; applied in order given."
+        ),
+    )
     # Generation-mode subcommand "smirnov"
     parser_smirnov = gen_mode_subparser.add_parser(
         "smirnov",
@@ -164,12 +175,29 @@ def main(argv: list[str]):
             # TODO(ckatsak): If args.trace_type == "huawei-prv", add preprocessing step!
             trace = azure_trace_preprocess(args.trace_dir)
             mapper = FunctionMapping(trace, workloads)
+            bench_caps: dict[str, float] | None = None
+            if getattr(args, "cap_bench_volume_frac", None):
+                bench_caps = {}
+                for item in args.cap_bench_volume_frac:
+                    if ":" not in item:
+                        raise RuntimeError(
+                            f'Invalid --cap-bench-volume-frac {item!r}; expected "BENCH:FRAC"'
+                        )
+                    bench, frac_s = item.split(":", 1)
+                    bench = bench.strip()
+                    frac = float(frac_s)
+                    if frac <= 0.0 or frac >= 1.0:
+                        raise RuntimeError(
+                            f"FRAC for {bench!r} must be in (0, 1), got {frac}"
+                        )
+                    bench_caps[bench] = frac
             parameters = Config(
                 gen_mode=args.gen_mode,
                 time_scaling=args.time_scaling if args.gen_mode == "spec" else "",
                 max_rps=args.request_rate,
                 first_minute=args.first_minute if args.gen_mode == "spec" else -42,
                 target_minutes=args.target_duration,
+                bench_volume_caps=bench_caps,
             )
             reqgen = RequestGenerator(mapper, parameters)
             if args.gen_mode == "spec":

@@ -5,7 +5,11 @@ import numpy as np
 
 from distribution import Distribution
 from mapping import FunctionMapping
-from specification import Specification, SpecificationRow
+from specification import (
+    Specification,
+    SpecificationRow,
+    apply_benchmark_volume_caps,
+)
 from workload import Workload
 
 
@@ -19,6 +23,9 @@ class Config:
     max_rps: int
     first_minute: int
     target_minutes: int
+    # Optional: cap each benchmark's share of total invocations (spec mode only).
+    # Keys are workload.benchmark names (e.g. "gzip"); values in (0, 1).
+    bench_volume_caps: dict[str, float] | None = None
 
 
 class RequestGenerator:
@@ -115,6 +122,11 @@ class RequestGenerator:
             )
 
         headers = ["avg", "mapped_wreq"] + minutes_header
+
+        if self.config.bench_volume_caps:
+            sorted_rows = apply_benchmark_volume_caps(
+                sorted_rows, self.config.bench_volume_caps
+            )
 
         return Specification(headers, sorted_rows)
 

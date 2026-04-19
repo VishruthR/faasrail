@@ -46,7 +46,7 @@ deploy_rust_single() {
     cp $binary_path ./exec
     zip -o archive.zip exec
 
-    local -a create_cmd=(wsk action create "$action_name" --native "archive.zip" -i)
+    local -a create_cmd=(wsk action create "$action_name" --kind native:default "archive.zip" -i)
 
     "${create_cmd[@]}"
 
