@@ -39,6 +39,6 @@
     "mean": 32.541558,
     "stdev": 21.677025,
     "bench": "aes",
-    "payload": "{\"message_length\": 4096, \"num_iterations\": 2000}"
+    "payload": "{\"message_length\": 1024, \"num_iterations\": 500}"
   }
 ]
