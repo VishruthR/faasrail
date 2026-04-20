@@ -1,22 +1,103 @@
-extern crate bench_chameleon;
-extern crate serde_json;
+use serde_json::{json, Value};
+use wasi::exports::http::incoming_handler::Guest;
+use wasi::http::types::{
+    Fields, IncomingRequest, Method, OutgoingBody, OutgoingResponse, ResponseOutparam,
+};
+use wasi::io::streams::StreamError;
 
-fn main() {
-    let mut a = std::env::args().skip(1);
-    let cols: usize = a
-        .next()
+fn parse_cli(args: &[String]) -> Value {
+    let cols: usize = args
+        .first()
         .expect("usage: bench-chameleon <num_of_cols> <num_of_rows>")
         .parse()
         .expect("<num_of_cols> must be usize");
-    let rows: usize = a
-        .next()
+    let rows: usize = args
+        .get(1)
         .expect("usage: bench-chameleon <num_of_cols> <num_of_rows>")
         .parse()
         .expect("<num_of_rows> must be usize");
-    let args = serde_json::json!({
-        "num_of_cols": cols,
-        "num_of_rows": rows,
-    });
-    let out = bench_chameleon::main(args).expect("bench_chameleon::main");
-    println!("{}", serde_json::to_string(&out).unwrap());
+    json!({ "num_of_cols": cols, "num_of_rows": rows })
 }
+
+fn invoke(args: Value) -> Result<Value, serde_json::Error> {
+    bench_chameleon::main(args)
+}
+
+fn main() {
+    let args: Vec<String> = std::env::args().skip(1).collect();
+    let input = parse_cli(&args);
+    match invoke(input) {
+        Ok(v) => println!("{}", serde_json::to_string(&v).unwrap()),
+        Err(e) => {
+            eprintln!("error: {e}");
+            std::process::exit(1);
+        }
+    }
+}
+
+struct Component;
+
+impl Guest for Component {
+    fn handle(request: IncomingRequest, response_out: ResponseOutparam) {
+        let response = match handle_request(request) {
+            Ok(body_json) => build_response(200, body_json),
+            Err((status, msg)) => build_response(status, json!({ "error": msg })),
+        };
+        ResponseOutparam::set(response_out, Ok(response));
+    }
+}
+
+fn handle_request(request: IncomingRequest) -> Result<Value, (u16, String)> {
+    if !matches!(request.method(), Method::Post) {
+        return Err((405, "method not allowed; use POST".into()));
+    }
+    let body = request
+        .consume()
+        .map_err(|_| (400, "could not consume request body".to_string()))?;
+    let bytes = read_all(&body).map_err(|e| (400, format!("read body: {e:?}")))?;
+    let input: Value = if bytes.is_empty() {
+        Value::Null
+    } else {
+        serde_json::from_slice(&bytes).map_err(|e| (400, format!("invalid JSON: {e}")))?
+    };
+    invoke(input).map_err(|e| (500, format!("bench error: {e}")))
+}
+
+fn read_all(body: &wasi::http::types::IncomingBody) -> Result<Vec<u8>, StreamError> {
+    let stream = body.stream().expect("incoming body stream");
+    let mut buf = Vec::new();
+    loop {
+        match stream.blocking_read(8192) {
+            Ok(chunk) => {
+                if chunk.is_empty() {
+                    break;
+                }
+                buf.extend_from_slice(&chunk);
+            }
+            Err(StreamError::Closed) => break,
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(buf)
+}
+
+fn build_response(status: u16, body: Value) -> OutgoingResponse {
+    let headers = Fields::new();
+    headers
+        .set(&"content-type".to_string(), &[b"application/json".to_vec()])
+        .expect("set content-type");
+    let response = OutgoingResponse::new(headers);
+    response.set_status_code(status).expect("set status");
+    let out_body = response.body().expect("outgoing body");
+    {
+        let stream = out_body.write().expect("body write stream");
+        let serialized = serde_json::to_vec(&body).unwrap_or_else(|_| b"{}".to_vec());
+        for chunk in serialized.chunks(4096) {
+            stream.blocking_write_and_flush(chunk).expect("write body");
+        }
+    }
+    OutgoingBody::finish(out_body, None).expect("finish body");
+    response
+}
+
+wasi::http::proxy::export!(Component with_types_in wasi);

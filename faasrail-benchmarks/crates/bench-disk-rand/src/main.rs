@@ -6,16 +6,21 @@ use wasi::http::types::{
 use wasi::io::streams::StreamError;
 
 fn parse_cli(args: &[String]) -> Value {
-    let n: u64 = args
+    let byte_size: usize = args
         .first()
-        .expect("usage: bench-float <n>")
+        .expect("usage: bench-disk-rand <byte_size> <file_size_mib>")
         .parse()
-        .expect("<n> must be a u64");
-    json!({ "n": n })
+        .expect("<byte_size> must be usize");
+    let file_size: usize = args
+        .get(1)
+        .expect("usage: bench-disk-rand <byte_size> <file_size_mib>")
+        .parse()
+        .expect("<file_size_mib> must be usize");
+    json!({ "byte_size": byte_size, "file_size": file_size })
 }
 
 fn invoke(args: Value) -> Result<Value, serde_json::Error> {
-    bench_float::main(args)
+    bench_disk_rand::main(args)
 }
 
 fn main() {
