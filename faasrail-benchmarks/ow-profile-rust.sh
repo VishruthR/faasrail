@@ -31,12 +31,12 @@ fi
 
 # bench_key|crate_dir|action_name|elapsed_field (field in --result JSON)
 BENCHMARKS=(
-    # "float|bench-float|bench_float|elapsed_ms"
-    # "json|bench-json|bench_json|elapsed_ms"
-    # "chameleon|bench-chameleon|bench_chameleon|elapsed_ms"
-    # "disk-seq|bench-disk-seq|bench_disk_seq|total_elapsed_ms"
-    # "disk-rand|bench-disk-rand|bench_disk_rand|total_elapsed_ms"
-    # "gzip|bench-gzip|bench_gzip|elapsed_ms"
+    "float|bench-float|bench_float|elapsed_ms"
+    "json|bench-json|bench_json|elapsed_ms"
+    "chameleon|bench-chameleon|bench_chameleon|elapsed_ms"
+    "disk-seq|bench-disk-seq|bench_disk_seq|total_elapsed_ms"
+    "disk-rand|bench-disk-rand|bench_disk_rand|total_elapsed_ms"
+    "gzip|bench-gzip|bench_gzip|elapsed_ms"
     "aes|bench-aes|bench_aes|elapsed_ms"
 )
 
@@ -85,7 +85,7 @@ for entry in "${BENCHMARKS[@]}"; do
         disk-seq)   payload='{"byte_size": 4096, "file_size": 1}' ;;
         disk-rand)  payload='{"byte_size": 4096, "file_size": 30}' ;;
         gzip)       payload='{"file_size": 30}' ;;
-        aes)        payload='{"message_length": 2048, "num_iterations": 2000}' ;;
+        aes)        payload='{"message_length": 1024, "num_iterations": 100}' ;;
         *)
             echo "error: unknown bench_key $bench_key" >&2
             exit 1
@@ -110,7 +110,7 @@ for entry in "${BENCHMARKS[@]}"; do
         printf "  run %d/%d: %.2f ms\n" "$i" "$RUNS" "$ms"
     done
 
-    # sleep 10
+    sleep 10
 
     rm -f "$payload_file"
 
@@ -142,5 +142,5 @@ for entry in "${BENCHMARKS[@]}"; do
         }]')
 done
 
-# echo "$results" | jq '.' > "$OUTPUT"
-# echo "Wrote $OUTPUT with $(echo "$results" | jq length) workloads."
+echo "$results" | jq '.' > "$OUTPUT"
+echo "Wrote $OUTPUT with $(echo "$results" | jq length) workloads."
