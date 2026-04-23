@@ -3,6 +3,7 @@ resolver = "2"
 members = [
     "crates/bench-common",
     "crates/bench-aes",
+    "crates/bench-dp",
     "crates/bench-float",
     "crates/bench-json",
     "crates/bench-chameleon",
