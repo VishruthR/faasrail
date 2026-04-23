@@ -7,4 +7,5 @@ members = [
     "crates/bench-gzip",
     "crates/bench-disk-seq",
     "crates/bench-disk-rand",
+    "crates/bench-dp"
 ]
