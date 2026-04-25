@@ -11,11 +11,13 @@ fn parse_cli(args: &[String]) -> Value {
     let hash = args.get(1).expect(USAGE).clone();
     let filename = args.get(2).expect(USAGE).clone();
     let max_iter: u32 = args.get(3).expect(USAGE).parse().expect("<max_iter> must be u32");
+    let data_dependency_path = args.get(4).map(|s| s.clone());
     json!({
         "url": url,
         "hash": hash,
         "filename": filename,
         "max_iter": max_iter,
+        "data_dependency_path": data_dependency_path,
     })
 }
 

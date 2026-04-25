@@ -20,6 +20,7 @@ struct Input {
     hash: String,
     filename: String,
     max_iter: u32,
+    data_dependency_path: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -57,7 +58,7 @@ fn parse_url(url: &str) -> Result<(Scheme, String, String), Error> {
 
 /// Download `url` to `filename` using `wasi:http/outgoing-handler`.
 /// Returns the response status and number of bytes written.
-fn get_image(url: &str, filename: &str) -> Result<(u16, u64), Error> {
+fn get_image(url: &str, filepath: &str) -> Result<(u16, u64), Error> {
     let (scheme, authority, path) = parse_url(url)?;
 
     let headers = Fields::new();
@@ -94,7 +95,7 @@ fn get_image(url: &str, filename: &str) -> Result<(u16, u64), Error> {
         .stream()
         .map_err(|_| Error::custom("response body stream"))?;
 
-    let mut file = File::create(filename)
+    let mut file = File::create(filepath)
         .map_err(|e| Error::custom(format!("file create: {e}")))?;
 
     let mut written: u64 = 0;
@@ -146,24 +147,31 @@ fn process_image(image: &[u8], width: u32, height: u32, max_iter: u32) {
     std::hint::black_box(checksum);
 }
 
-fn does_image_exist(filename: &str) -> bool {
-    File::open(filename).is_ok()
+fn does_image_exist(filepath: &str) -> bool {
+    File::open(filepath).is_ok()
 }
 
 pub fn main(args: Value) -> Result<Value, Error> {
     let input: Input = serde_json::from_value(args)?;
     let start = std::time::Instant::now();
 
+    let filepath = if(input.data_dependency_path.is_some()) {
+        input.data_dependency_path.clone().unwrap() + "/" + &input.filename
+    } else {
+        "./".to_owned() + &input.filename
+    };
+
     let dl_start = std::time::Instant::now();
-    let (_status, bytes_written) = if does_image_exist(&input.filename) {
+    // Only skip downloading image if data dependency is defined
+    let (_status, bytes_written) = if input.data_dependency_path.is_some() && does_image_exist(&filepath) {
         (200, 0)
     } else {
-        get_image(&input.url, &input.filename)?
+        get_image(&input.url, &filepath)?
     };
     let download_ms = elapsed_ms(dl_start);
 
     let mut image = Vec::new();
-    File::open(&input.filename)
+    File::open(&filepath)
         .and_then(|mut f| f.read_to_end(&mut image))
         .map_err(|e| Error::custom(format!("file read: {e}")))?;
 
