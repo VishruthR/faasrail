@@ -8,8 +8,98 @@ use std::fs::File;
 use std::io::{Read, Write};
 
 use wasi::http::outgoing_handler::handle;
-use wasi::http::types::{Fields, Method, OutgoingRequest, Scheme};
+use wasi::http::types::{Fields, IncomingResponse, Method, OutgoingRequest, Scheme};
 use wasi::io::streams::StreamError;
+
+const MAX_REDIRECTS: usize = 5;
+
+fn host_lc(authority: &str) -> String {
+    let a = authority.to_ascii_lowercase();
+    if let Some((h, p)) = a.rsplit_once(':') {
+        if !a.starts_with('[') && p.chars().all(|c| c.is_ascii_digit()) {
+            return h.to_string();
+        }
+    }
+    a
+}
+
+fn is_redirect_status(status: u16) -> bool {
+    matches!(status, 301 | 302 | 303 | 307 | 308)
+}
+
+/// Lorem Picsum: first hop is `picsum.photos` → absolute `Location` on `fastly.picsum.photos`.
+fn picsum_redirect_allowed(from_authority: &str, location_url: &str) -> Result<(), Error> {
+    let (_, loc_auth, _) = parse_url(location_url)?;
+    let from_h = host_lc(from_authority);
+    let to_h = host_lc(&loc_auth);
+    if from_h == "picsum.photos" && to_h == "fastly.picsum.photos" {
+        return Ok(());
+    }
+    if from_h == "fastly.picsum.photos" && to_h == "fastly.picsum.photos" {
+        return Ok(());
+    }
+    Err(Error::custom(format!(
+        "picsum redirect rejected (from host `{from_h}` to `{to_h}`)"
+    )))
+}
+
+fn location_header(response: &IncomingResponse) -> Option<String> {
+    let hdrs = response.headers();
+    let vals = hdrs.get("location");
+    vals.first().and_then(|bytes| {
+        std::str::from_utf8(bytes)
+            .ok()
+            .map(|s| s.trim().to_owned())
+    })
+}
+
+fn drain_response_body(response: &IncomingResponse) -> Result<(), Error> {
+    let body = response
+        .consume()
+        .map_err(|_| Error::custom("consume redirect body"))?;
+    let stream = body
+        .stream()
+        .map_err(|_| Error::custom("redirect body stream"))?;
+    loop {
+        match stream.blocking_read(64 * 1024) {
+            Ok(chunk) if chunk.is_empty() => break,
+            Ok(_) => {}
+            Err(StreamError::Closed) => break,
+            Err(e) => return Err(Error::custom(format!("redirect body read: {e:?}"))),
+        }
+    }
+    Ok(())
+}
+
+fn send_get(url: &str) -> Result<IncomingResponse, Error> {
+    let (scheme, authority, path) = parse_url(url)?;
+
+    let headers = Fields::new();
+    let request = OutgoingRequest::new(headers);
+    request
+        .set_method(&Method::Get)
+        .map_err(|_| Error::custom("set method"))?;
+    request
+        .set_scheme(Some(&scheme))
+        .map_err(|_| Error::custom("set scheme"))?;
+    request
+        .set_authority(Some(&authority))
+        .map_err(|_| Error::custom("set authority"))?;
+    request
+        .set_path_with_query(Some(&path))
+        .map_err(|_| Error::custom("set path"))?;
+
+    let future = handle(request, None)
+        .map_err(|e| Error::custom(format!("outgoing handler: {e:?}")))?;
+
+    future.subscribe().block();
+
+    future
+        .get()
+        .ok_or_else(|| Error::custom("response future not ready after block"))?
+        .map_err(|_| Error::custom("response future already consumed"))?
+        .map_err(|e| Error::custom(format!("http error: {e:?}")))
+}
 
 const RENDER_WIDTH: u32 = 300;
 const RENDER_HEIGHT: u32 = 300;
@@ -56,63 +146,69 @@ fn parse_url(url: &str) -> Result<(Scheme, String, String), Error> {
     Ok((scheme, authority, path_and_query))
 }
 
-/// Download `url` to `filename` using `wasi:http/outgoing-handler`.
-/// Returns the response status and number of bytes written.
+/// Download `url` to `filepath` using `wasi:http/outgoing-handler`.
+/// For **Lorem Picsum** (`picsum.photos`), follows up to `MAX_REDIRECTS` redirects
+/// to `fastly.picsum.photos` using absolute `Location` URLs. Other hosts are unchanged
+/// (no redirect following).
+///
+/// Returns the final response status and number of bytes written.
 fn get_image(url: &str, filepath: &str) -> Result<(u16, u64), Error> {
-    let (scheme, authority, path) = parse_url(url)?;
+    let (_, first_authority, _) = parse_url(url)?;
+    let follow_picsum = host_lc(&first_authority) == "picsum.photos";
 
-    let headers = Fields::new();
-    let request = OutgoingRequest::new(headers);
-    request
-        .set_method(&Method::Get)
-        .map_err(|_| Error::custom("set method"))?;
-    request
-        .set_scheme(Some(&scheme))
-        .map_err(|_| Error::custom("set scheme"))?;
-    request
-        .set_authority(Some(&authority))
-        .map_err(|_| Error::custom("set authority"))?;
-    request
-        .set_path_with_query(Some(&path))
-        .map_err(|_| Error::custom("set path"))?;
+    let mut current_url = url.to_string();
+    for _ in 0..MAX_REDIRECTS {
+        let (_, authority, _) = parse_url(&current_url)?;
+        let response = send_get(&current_url)?;
+        let status = response.status();
 
-    let future = handle(request, None)
-        .map_err(|e| Error::custom(format!("outgoing handler: {e:?}")))?;
-
-    future.subscribe().block();
-
-    let response = future
-        .get()
-        .ok_or_else(|| Error::custom("response future not ready after block"))?
-        .map_err(|_| Error::custom("response future already consumed"))?
-        .map_err(|e| Error::custom(format!("http error: {e:?}")))?;
-
-    let status = response.status();
-    let body = response
-        .consume()
-        .map_err(|_| Error::custom("consume response body"))?;
-    let stream = body
-        .stream()
-        .map_err(|_| Error::custom("response body stream"))?;
-
-    let mut file = File::create(filepath)
-        .map_err(|e| Error::custom(format!("file create: {e}")))?;
-
-    let mut written: u64 = 0;
-    loop {
-        match stream.blocking_read(64 * 1024) {
-            Ok(chunk) if chunk.is_empty() => break,
-            Ok(chunk) => {
-                file.write_all(&chunk)
-                    .map_err(|e| Error::custom(format!("file write: {e}")))?;
-                written += chunk.len() as u64;
-            }
-            Err(StreamError::Closed) => break,
-            Err(e) => return Err(Error::custom(format!("body read: {e:?}"))),
+        if is_redirect_status(status) && follow_picsum {
+            let next = location_header(&response).ok_or_else(|| {
+                Error::custom(format!(
+                    "HTTP {status} from picsum but no usable Location header"
+                ))
+            })?;
+            picsum_redirect_allowed(&authority, &next)?;
+            drain_response_body(&response)?;
+            current_url = next;
+            continue;
         }
+
+        if is_redirect_status(status) && !follow_picsum {
+            drain_response_body(&response)?;
+            return Ok((status, 0));
+        }
+
+        let body = response
+            .consume()
+            .map_err(|_| Error::custom("consume response body"))?;
+        let stream = body
+            .stream()
+            .map_err(|_| Error::custom("response body stream"))?;
+
+        let mut file = File::create(filepath)
+            .map_err(|e| Error::custom(format!("file create: {e}")))?;
+
+        let mut written: u64 = 0;
+        loop {
+            match stream.blocking_read(64 * 1024) {
+                Ok(chunk) if chunk.is_empty() => break,
+                Ok(chunk) => {
+                    file.write_all(&chunk)
+                        .map_err(|e| Error::custom(format!("file write: {e}")))?;
+                    written += chunk.len() as u64;
+                }
+                Err(StreamError::Closed) => break,
+                Err(e) => return Err(Error::custom(format!("body read: {e:?}"))),
+            }
+        }
+
+        return Ok((status, written));
     }
 
-    Ok((status, written))
+    Err(Error::custom(format!(
+        "more than {MAX_REDIRECTS} redirects (picsum)"
+    )))
 }
 
 /// Render a Mandelbrot set over the classic view (x in [-2.0, 1.0],
@@ -122,14 +218,18 @@ fn get_image(url: &str, filepath: &str) -> Result<(u16, u64), Error> {
 fn process_image(image: &[u8], width: u32, height: u32, max_iter: u32) {
     let w = width as f64;
     let h = height as f64;
-    let n = image.len().max(1);
+    let n = image.len();
     let mut checksum: u64 = 0;
 
     for py in 0..height {
         let cy = -1.2 + (py as f64 / h) * 2.4;
         for px in 0..width {
             let cx = -2.0 + (px as f64 / w) * 3.0;
-            let byte = image[((py as usize) * (width as usize) + px as usize) % n] as f64 / 255.0;
+            let byte = if n == 0 {
+                0.0
+            } else {
+                image[((py as usize) * (width as usize) + px as usize) % n] as f64 / 255.0
+            };
             let cx = cx + byte * 1e-6;
 
             let (mut x, mut y) = (0.0_f64, 0.0_f64);
@@ -163,8 +263,8 @@ pub fn main(args: Value) -> Result<Value, Error> {
 
     let dl_start = std::time::Instant::now();
     // Only skip downloading image if data dependency is defined
-    let (_status, bytes_written) = if input.data_dependency_path.is_some() && does_image_exist(&filepath) {
-        (200, 0)
+    let (status, bytes_written) = if input.data_dependency_path.is_some() && does_image_exist(&filepath) {
+        (200u16, 0u64)
     } else {
         get_image(&input.url, &filepath)?
     };
@@ -174,6 +274,14 @@ pub fn main(args: Value) -> Result<Value, Error> {
     File::open(&filepath)
         .and_then(|mut f| f.read_to_end(&mut image))
         .map_err(|e| Error::custom(format!("file read: {e}")))?;
+
+    if image.is_empty() {
+        return Err(Error::custom(format!(
+            "image is empty (HTTP status {status}, {bytes_written} bytes saved). \
+             For non-picsum hosts, redirects are not followed (302 often has no body); \
+             use a final URL or pre-seed the file under data_dependency_path."
+        )));
+    }
 
     let render_start = std::time::Instant::now();
     process_image(&image, RENDER_WIDTH, RENDER_HEIGHT, input.max_iter);
