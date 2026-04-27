@@ -34,6 +34,7 @@ BENCHMARKS=(
     "disk-rand|bench-disk-rand|bench_disk_rand|total_elapsed_ms"
     "gzip|bench-gzip|bench_gzip|elapsed_ms"
     "aes|bench-aes|bench_aes|elapsed_ms"
+    "dp|bench-dp|bench_dp|total_elapsed_ms"
 )
 
 deploy_rust_single() {
