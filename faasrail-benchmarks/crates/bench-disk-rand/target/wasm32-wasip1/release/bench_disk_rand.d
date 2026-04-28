@@ -1,0 +1,1 @@
+/home/svbagga2/faasrail/faasrail-benchmarks/crates/bench-disk-rand/target/wasm32-wasip1/release/bench_disk_rand.wasm: /home/svbagga2/faasrail/faasrail-benchmarks/crates/bench-disk-rand/src/lib.rs /home/svbagga2/faasrail/faasrail-benchmarks/crates/bench-disk-rand/src/main.rs

@@ -15,31 +15,23 @@ Usage:
        --insecure
 """
 
-
 import argparse
 import json
 import statistics
 import time
 from pathlib import Path
-from urllib.parse import urljoin
 
 import requests
 import urllib3
 
-# ── Percentile helper ─────────────────────────────────────────────────────────
-
-def percentile(sorted_values: list[float], p: float) -> float:
+def percentile(sorted_values: list, p: float) -> float:
     if not sorted_values:
         return 0.0
     k = (len(sorted_values) - 1) * p / 100
     lo, hi = int(k), min(int(k) + 1, len(sorted_values) - 1)
     return sorted_values[lo] + (sorted_values[hi] - sorted_values[lo]) * (k - lo)
 
-
-# ── OpenWhisk Activation API ──────────────────────────────────────────────────
-
-def fetch_activation(session: requests.Session, ow_host: str,
-                     namespace: str, activation_id: str) -> dict | None:
+def fetch_activation(session, ow_host, namespace, activation_id):
     url = f"{ow_host}/api/v1/namespaces/{namespace}/activations/{activation_id}"
     try:
         resp = session.get(url, timeout=10)
@@ -49,30 +41,23 @@ def fetch_activation(session: requests.Session, ow_host: str,
         print(f"  WARN: could not fetch activation {activation_id}: {e}")
         return None
 
-
-def extract_annotation(annotations: list[dict], key: str):
+def extract_annotation(annotations, key):
     for ann in annotations:
         if ann.get("key") == key:
             return ann.get("value")
     return None
 
-
-# ── Prometheus scraper ────────────────────────────────────────────────────────
-
 PROMETHEUS_METRICS_OF_INTEREST = [
-    "openwhisk_invoker_containerPool_activeActivations",
-    "openwhisk_invoker_containerPool_busyContainersTotal",
-    "openwhisk_invoker_containerPool_freeContainersTotal",
-    "openwhisk_invoker_containerPool_memoryUsedMBytes",
-    "openwhisk_invoker_containerPool_memoryQueuedMBytes",
-    "openwhisk_invoker_activationsTotal",
+    "gauge_containerPool_activeCount_counter",
+    "gauge_containerPool_idlesCount_counter",
+    "gauge_containerPool_prewarmCount_counter",
+    "gauge_containerPool_activeSize_counter_bytes",
+    "gauge_containerPool_idlesSize_counter_bytes",
+    "gauge_containerPool_runBufferCount_counter",
+    "counter_invoker_docker_start_total",
 ]
 
-def scrape_prometheus(prometheus_url: str, session: requests.Session) -> dict:
-    """
-    Scrapes the /metrics text endpoint and extracts the metrics we care about.
-    Returns a dict of {metric_name: float}.
-    """
+def scrape_prometheus(prometheus_url, session):
     url = f"{prometheus_url.rstrip('/')}/metrics"
     result = {}
     try:
@@ -93,21 +78,16 @@ def scrape_prometheus(prometheus_url: str, session: requests.Session) -> dict:
         print(f"  WARN: could not scrape Prometheus at {url}: {e}")
     return result
 
-
-# ── Main ──────────────────────────────────────────────────────────────────────
-
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--ndjson", required=True, help="Path to results.ndjson from ow-loadgen")
+    ap.add_argument("--ndjson", required=True)
     ap.add_argument("--ow-host", required=True)
-    ap.add_argument("--auth", required=True, help="user:password")
+    ap.add_argument("--auth", required=True)
     ap.add_argument("--namespace", default="guest")
-    ap.add_argument("--prometheus-url", default=None,
-                    help="Base URL of Prometheus /metrics endpoint, e.g. http://invoker:9095")
+    ap.add_argument("--prometheus-url", default=None)
     ap.add_argument("--out", default="benchmark_results.json")
     ap.add_argument("--insecure", action="store_true")
-    ap.add_argument("--max-activations", type=int, default=None,
-                    help="Limit activation API calls (for quick testing)")
+    ap.add_argument("--max-activations", type=int, default=None)
     args = ap.parse_args()
 
     if args.insecure:
@@ -118,7 +98,6 @@ def main():
     session.auth = (user, password)
     session.verify = not args.insecure
 
-    # ── Load NDJSON ──────────────────────────────────────────────────────────
     records = []
     with open(args.ndjson) as f:
         for line in f:
@@ -128,16 +107,24 @@ def main():
 
     print(f"Loaded {len(records)} records from {args.ndjson}")
 
-    # ── Enrich via Activation API ────────────────────────────────────────────
     enriched = []
     cold_starts = []
     server_durations_ms = []
     memory_mb_list = []
     wait_times_ms = []
 
+    # Per-function server-side duration tracking
+    by_bench_server = {}
+
     activation_ids = [
         r["activation_id"] for r in records if r.get("activation_id")
     ]
+    # Build a map from activation_id to bench name
+    act_to_bench = {
+        r["activation_id"]: r["bench"]
+        for r in records if r.get("activation_id")
+    }
+
     if args.max_activations:
         activation_ids = activation_ids[:args.max_activations]
 
@@ -153,15 +140,15 @@ def main():
         init_time_ms = extract_annotation(annotations, "initTime") or 0
         wait_time_ms = extract_annotation(annotations, "waitTime") or 0
         duration_ms = act.get("duration", 0)
-
-        # memory is in the limits annotation
         limits = extract_annotation(annotations, "limits") or {}
         memory_mb = limits.get("memory", 0)
-
         is_cold = init_time_ms > 0
+
+        bench_name = act_to_bench.get(act_id, "unknown")
 
         enriched.append({
             "activation_id": act_id,
+            "bench": bench_name,
             "is_cold_start": is_cold,
             "init_time_ms": init_time_ms,
             "wait_time_ms": wait_time_ms,
@@ -169,41 +156,49 @@ def main():
             "memory_limit_mb": memory_mb,
         })
 
+        # Track per-function server-side duration
+        by_bench_server.setdefault(bench_name, []).append(duration_ms)
+
         if is_cold:
             cold_starts.append(init_time_ms)
         server_durations_ms.append(duration_ms)
         memory_mb_list.append(memory_mb)
         wait_times_ms.append(wait_time_ms)
 
-        # Be gentle with the OW API
         time.sleep(0.01)
 
-    # ── Compute client-side latency percentiles ───────────────────────────────
+    # Client-side latency (per function, for reference only)
     latencies_us = sorted(r["latency_us"] for r in records)
     latencies_ms = [x / 1000 for x in latencies_us]
 
-    # Per-function breakdown
-    by_bench: dict[str, list[float]] = {}
+    by_bench_client = {}
     for r in records:
-        by_bench.setdefault(r["bench"], []).append(r["latency_us"] / 1000)
+        if 200 <= r["status_code"] < 300:
+            by_bench_client.setdefault(r["bench"], []).append(r["latency_us"] / 1000)
+
     per_function_stats = {}
-    for bench, lats in by_bench.items():
-        lats_sorted = sorted(lats)
+    for bench in set(list(by_bench_client.keys()) + list(by_bench_server.keys())):
+        client_lats = sorted(by_bench_client.get(bench, []))
+        server_durs = sorted(by_bench_server.get(bench, []))
         per_function_stats[bench] = {
-            "count": len(lats_sorted),
-            "p50_ms": percentile(lats_sorted, 50),
-            "p90_ms": percentile(lats_sorted, 90),
-            "p99_ms": percentile(lats_sorted, 99),
-            "mean_ms": statistics.mean(lats_sorted),
+            "count": len(server_durs),
+            # Server-side execution duration (real)
+            "server_p50_ms": percentile(server_durs, 50),
+            "server_p90_ms": percentile(server_durs, 90),
+            "server_p99_ms": percentile(server_durs, 99),
+            "server_mean_ms": statistics.mean(server_durs) if server_durs else 0,
+            # Client-side round-trip (for reference, not execution time)
+            "client_p50_ms": percentile(client_lats, 50),
+            "client_p90_ms": percentile(client_lats, 90),
+            "client_p99_ms": percentile(client_lats, 99),
+            "client_mean_ms": statistics.mean(client_lats) if client_lats else 0,
         }
 
-    # ── Optionally scrape Prometheus ─────────────────────────────────────────
     prometheus_snapshot = {}
     if args.prometheus_url:
         print(f"Scraping Prometheus at {args.prometheus_url} ...")
         prometheus_snapshot = scrape_prometheus(args.prometheus_url, session)
 
-    # ── Assemble report ──────────────────────────────────────────────────────
     server_durations_sorted = sorted(server_durations_ms)
     cold_starts_sorted = sorted(cold_starts)
 
@@ -217,6 +212,7 @@ def main():
             "mean": statistics.mean(latencies_ms) if latencies_ms else 0,
             "min": latencies_ms[0] if latencies_ms else 0,
             "max": latencies_ms[-1] if latencies_ms else 0,
+            "note": "HTTP round-trip to OW queue, not execution time"
         },
         "server_side_duration_ms": {
             "p50": percentile(server_durations_sorted, 50),
@@ -236,6 +232,7 @@ def main():
             "p50": percentile(sorted(wait_times_ms), 50),
             "p90": percentile(sorted(wait_times_ms), 90),
             "p99": percentile(sorted(wait_times_ms), 99),
+            "note": "Time in OW queue before dispatch"
         },
         "per_function": per_function_stats,
         "prometheus_system_metrics": prometheus_snapshot,
@@ -247,11 +244,12 @@ def main():
 
     print(f"\nReport written to {out_path}")
     print(f"  Total invocations : {report['total_invocations']}")
+    print(f"  Successful        : {report['successful_invocations']}")
     print(f"  Cold starts       : {report['cold_starts']['count']} ({report['cold_starts']['rate']:.1%})")
-    print(f"  Client p50/p99 ms : {report['client_side_latency_ms']['p50']:.1f} / {report['client_side_latency_ms']['p99']:.1f}")
-    if server_durations_sorted:
-        print(f"  Server p50/p99 ms : {report['server_side_duration_ms']['p50']:.1f} / {report['server_side_duration_ms']['p99']:.1f}")
-
+    print(f"  Server p50/p99 ms : {report['server_side_duration_ms']['p50']:.1f} / {report['server_side_duration_ms']['p99']:.1f}")
+    print(f"\nPer-function server-side duration:")
+    for bench, stats in sorted(per_function_stats.items()):
+        print(f"  {bench:12s}: p50={stats['server_p50_ms']:.1f}ms  p90={stats['server_p90_ms']:.1f}ms  p99={stats['server_p99_ms']:.1f}ms  mean={stats['server_mean_ms']:.1f}ms")
 
 if __name__ == "__main__":
     main()

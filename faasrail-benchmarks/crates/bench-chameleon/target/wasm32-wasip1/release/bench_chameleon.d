@@ -1,0 +1,1 @@
+/home/svbagga2/faasrail/faasrail-benchmarks/crates/bench-chameleon/target/wasm32-wasip1/release/bench_chameleon.wasm: /home/svbagga2/faasrail/faasrail-benchmarks/crates/bench-chameleon/src/lib.rs /home/svbagga2/faasrail/faasrail-benchmarks/crates/bench-chameleon/src/main.rs

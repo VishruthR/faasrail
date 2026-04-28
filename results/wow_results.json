@@ -1,0 +1,91 @@
+{
+  "total_invocations": 14390,
+  "successful_invocations": 13561,
+  "client_side_latency_ms": {
+    "p50": 1.98,
+    "p90": 4.912,
+    "p99": 10.432860000000014,
+    "mean": 2.6501490618485057,
+    "min": 0.978,
+    "max": 101.831
+  },
+  "server_side_duration_ms": {
+    "p50": 18.0,
+    "p90": 293.0,
+    "p99": 833.0,
+    "mean": 164.67782611901777
+  },
+  "cold_starts": {
+    "count": 5935,
+    "rate": 0.43765209055379395,
+    "p50_init_time_ms": 15.0,
+    "p90_init_time_ms": 42.0,
+    "p99_init_time_ms": 518.6399999999994,
+    "mean_init_time_ms": 88.62173546756529
+  },
+  "wait_time_ms": {
+    "p50": 3.0,
+    "p90": 9684.0,
+    "p99": 51282.999999999985
+  },
+  "per_function": {
+    "disk-seq": {
+      "count": 5420,
+      "p50_ms": 1.9224999999999999,
+      "p90_ms": 4.703000000000004,
+      "p99_ms": 9.879640000000018,
+      "mean_ms": 2.5359238007380074
+    },
+    "json": {
+      "count": 684,
+      "p50_ms": 2.043,
+      "p90_ms": 4.586800000000001,
+      "p99_ms": 7.9580899999999675,
+      "mean_ms": 2.6081359649122806
+    },
+    "chameleon": {
+      "count": 1414,
+      "p50_ms": 2.0315000000000003,
+      "p90_ms": 5.035300000000001,
+      "p99_ms": 11.184949999999969,
+      "mean_ms": 2.7509172560113155
+    },
+    "disk-rand": {
+      "count": 1974,
+      "p50_ms": 2.059,
+      "p90_ms": 5.1785,
+      "p99_ms": 10.816849999999997,
+      "mean_ms": 2.7315835866261398
+    },
+    "aes": {
+      "count": 1652,
+      "p50_ms": 1.981,
+      "p90_ms": 4.977900000000001,
+      "p99_ms": 10.316420000000003,
+      "mean_ms": 2.677661622276029
+    },
+    "gzip": {
+      "count": 1544,
+      "p50_ms": 2.1215,
+      "p90_ms": 5.0186,
+      "p99_ms": 11.510959999999992,
+      "mean_ms": 2.8599067357512955
+    },
+    "float": {
+      "count": 1702,
+      "p50_ms": 1.9535,
+      "p90_ms": 4.828900000000003,
+      "p99_ms": 11.044190000000004,
+      "mean_ms": 2.635626909518214
+    }
+  },
+  "prometheus_system_metrics": {
+    "counter_invoker_docker_start_total": 0.0,
+    "gauge_containerPool_prewarmCount_counter": 0.0,
+    "gauge_containerPool_activeCount_counter": 0.0,
+    "gauge_containerPool_idlesCount_counter": 0.0,
+    "gauge_containerPool_runBufferCount_counter": 0.0,
+    "gauge_containerPool_activeSize_counter_bytes": 0.0,
+    "gauge_containerPool_idlesSize_counter_bytes": 0.0
+  }
+}

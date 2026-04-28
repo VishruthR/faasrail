@@ -1,0 +1,1 @@
+/home/svbagga2/faasrail/faasrail-benchmarks/crates/bench-aes/target/wasm32-wasip1/release/bench_aes.wasm: /home/svbagga2/faasrail/faasrail-benchmarks/crates/bench-aes/src/lib.rs /home/svbagga2/faasrail/faasrail-benchmarks/crates/bench-aes/src/main.rs

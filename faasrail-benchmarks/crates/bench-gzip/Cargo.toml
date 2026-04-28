@@ -13,3 +13,9 @@ serde_json = "=1.0.39"
 serde_derive = "=1.0.91"
 flate2 = { version = "=1.0.13", default-features = false, features = ["miniz_oxide"] }
 wasi = "0.14"
+
+[[bin]]
+name = "bench_gzip"
+path = "src/main.rs"
+
+[workspace]
