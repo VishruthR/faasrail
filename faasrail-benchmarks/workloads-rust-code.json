@@ -27,7 +27,7 @@
     "mean": 85.784388,
     "stdev": 43.790808,
     "bench": "disk-rand",
-    "payload": "{\"byte_size\": 4096, \"file_size\": 30}"
+    "payload": "{\"byte_size\": 4096, \"file_size\": 15}"
   },
   {
     "mean": 95.304729,
