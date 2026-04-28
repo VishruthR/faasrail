@@ -1,0 +1,113 @@
+{
+  "total_invocations": 14390,
+  "successful_invocations": 14390,
+  "client_side_latency_ms": {
+    "p50": 2.765,
+    "p90": 5.583200000000001,
+    "p99": 16.82905000000003,
+    "mean": 3.66520340514246,
+    "min": 2.008,
+    "max": 205.055,
+    "note": "HTTP round-trip to OW queue, not execution time"
+  },
+  "server_side_duration_ms": {
+    "p50": 6.0,
+    "p90": 245.0,
+    "p99": 269.0,
+    "mean": 42.44357192494788
+  },
+  "cold_starts": {
+    "count": 18,
+    "rate": 0.001250868658790827,
+    "p50_init_time_ms": 29.0,
+    "p90_init_time_ms": 53.7,
+    "p99_init_time_ms": 68.29999999999998,
+    "mean_init_time_ms": 33.22222222222222
+  },
+  "wait_time_ms": {
+    "p50": 5.0,
+    "p90": 250.0,
+    "p99": 255.0,
+    "note": "Time in OW queue before dispatch"
+  },
+  "per_function": {
+    "chameleon": {
+      "count": 1414,
+      "server_p50_ms": 5.0,
+      "server_p90_ms": 6.0,
+      "server_p99_ms": 8.0,
+      "server_mean_ms": 5.112446958981613,
+      "client_p50_ms": 2.748,
+      "client_p90_ms": 5.333900000000001,
+      "client_p99_ms": 16.273709999999994,
+      "client_mean_ms": 3.5487199434229137
+    },
+    "disk-rand": {
+      "count": 1974,
+      "server_p50_ms": 76.0,
+      "server_p90_ms": 81.0,
+      "server_p99_ms": 96.26999999999998,
+      "server_mean_ms": 77.3839918946302,
+      "client_p50_ms": 2.753,
+      "client_p90_ms": 5.412200000000001,
+      "client_p99_ms": 15.31472999999999,
+      "client_mean_ms": 3.621720871327254
+    },
+    "json": {
+      "count": 684,
+      "server_p50_ms": 2.0,
+      "server_p90_ms": 3.0,
+      "server_p99_ms": 6.0,
+      "server_mean_ms": 2.3874269005847952,
+      "client_p50_ms": 2.777,
+      "client_p90_ms": 5.1750000000000025,
+      "client_p99_ms": 16.851409999999962,
+      "client_mean_ms": 3.5518377192982458
+    },
+    "gzip": {
+      "count": 1544,
+      "server_p50_ms": 251.0,
+      "server_p90_ms": 268.0,
+      "server_p99_ms": 319.27999999999975,
+      "server_mean_ms": 255.53432642487047,
+      "client_p50_ms": 2.746,
+      "client_p90_ms": 5.630300000000001,
+      "client_p99_ms": 15.508299999999968,
+      "client_mean_ms": 3.6174863989637305
+    },
+    "disk-seq": {
+      "count": 5420,
+      "server_p50_ms": 4.0,
+      "server_p90_ms": 5.0,
+      "server_p99_ms": 7.0,
+      "server_mean_ms": 3.989667896678967,
+      "client_p50_ms": 2.7744999999999997,
+      "client_p90_ms": 5.594200000000001,
+      "client_p99_ms": 18.175670000000082,
+      "client_mean_ms": 3.722229704797048
+    },
+    "float": {
+      "count": 1702,
+      "server_p50_ms": 10.0,
+      "server_p90_ms": 11.0,
+      "server_p99_ms": 15.0,
+      "server_mean_ms": 10.038190364277321,
+      "client_p50_ms": 2.763,
+      "client_p90_ms": 5.993600000000002,
+      "client_p99_ms": 17.471290000000003,
+      "client_mean_ms": 3.7282373678025853
+    },
+    "aes": {
+      "count": 1652,
+      "server_p50_ms": 9.0,
+      "server_p90_ms": 11.0,
+      "server_p99_ms": 20.0,
+      "server_mean_ms": 9.619249394673124,
+      "client_p50_ms": 2.7735000000000003,
+      "client_p90_ms": 5.449500000000002,
+      "client_p99_ms": 17.071730000000006,
+      "client_mean_ms": 3.6563613801452783
+    }
+  },
+  "prometheus_system_metrics": {}
+}
