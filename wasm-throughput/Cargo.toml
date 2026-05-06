@@ -1,0 +1,19 @@
+[package]
+name = "wasm-throughput"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4", features = ["derive"] }
+csv = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+reqwest = { version = "0.12", features = ["json", "native-tls"], default-features = false }
+tokio = { version = "1", features = ["full"] }
+base64 = "0.22"
+rand = "0.8"
+
+[profile.release]
+codegen-units = 1
+lto = "fat"
+panic = "abort"
